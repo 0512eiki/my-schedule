@@ -1,0 +1,1342 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My schedule</title>
+<meta name="theme-color" content="#34449a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="My schedule">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* 柔道着の藍と白。スマホは下にタブ、iPad/Mac は左にメニュー＋2列 */
+:root{
+  --bg:#f2f4f8; --card:#ffffff; --ink:#1a2240; --muted:#646e88; --line:#dce1eb; --soft:#e9edf5;
+  --accent:#34449a; --accent-soft:#e3e7f7;
+  --paid:#1d845a; --paid-soft:#dff3ea; --due:#c4433a; --due-soft:#fbe5e3; --plan:#8a6a12; --plan-soft:#f6eed6;
+  --f-display:"Shippori Mincho B1","Hiragino Mincho ProN",serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+  --f-num:"DM Mono",ui-monospace,Menlo,monospace;
+  --r:14px;
+  --t-practice:#0f7f8c; --t-match:#c0601a; --t-ref:#4a5a78; --t-sem:#7a4bb0; --t-exam:#8a5a2b; --t-travel:#2f6f3e; --t-other:#5d6578;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1220; --card:#161b2b; --ink:#e7eaf3; --muted:#9aa3ba; --line:#283049; --soft:#1e2436;
+  --accent:#9aa8ff; --accent-soft:#252c4d;
+  --paid:#52c58f; --paid-soft:#173527; --due:#ff8378; --due-soft:#3a1d1c; --plan:#e2c065; --plan-soft:#352c14;
+  --t-practice:#5cc8d4; --t-match:#f0a060; --t-ref:#a5b4d6; --t-sem:#c4a0f0; --t-exam:#d9a874; --t-travel:#7fcf92; --t-other:#a7afc2;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1220; --card:#161b2b; --ink:#e7eaf3; --muted:#9aa3ba; --line:#283049; --soft:#1e2436;
+  --accent:#9aa8ff; --accent-soft:#252c4d;
+  --paid:#52c58f; --paid-soft:#173527; --due:#ff8378; --due-soft:#3a1d1c; --plan:#e2c065; --plan-soft:#352c14;
+  --t-practice:#5cc8d4; --t-match:#f0a060; --t-ref:#a5b4d6; --t-sem:#c4a0f0; --t-exam:#d9a874; --t-travel:#7fcf92; --t-other:#a7afc2;
+  color-scheme:dark}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+.login{max-width:380px;margin:12vh auto 0;display:grid;gap:14px}
+.login .brand{font-size:30px;text-align:center}
+.login .card{display:grid;gap:12px}
+.err{color:var(--due);font-size:14px;font-weight:700}
+.loading{color:var(--muted);text-align:center;padding:60px 0}
+.sync{font-size:12px;color:var(--muted)}
+.sync.bad{color:var(--due);font-weight:700}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;-webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+textarea{resize:vertical;min-height:84px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+
+.app{display:flex;min-height:100vh}
+nav.side{display:none}
+main{flex:1;min-width:0;padding-inline:16px;padding-block:16px 110px;max-width:1040px;margin:0 auto;width:100%;overflow-x:clip}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.brand{font-family:var(--f-display);font-weight:800;font-size:24px;letter-spacing:.04em}
+.brand small{display:block;font-family:var(--f-body);font-weight:500;font-size:11px;letter-spacing:.14em;color:var(--muted)}
+.btn{border:0;border-radius:999px;padding:10px 18px;font-weight:700;background:var(--ink);color:var(--bg);white-space:nowrap}
+.btn.ghost{background:var(--soft);color:var(--ink)}
+.btn.sm{padding:6px 12px;font-size:13px}
+.btn.paid{background:var(--paid);color:var(--card)}
+.btn.danger{background:var(--due-soft);color:var(--due)}
+.btn.block{width:100%;padding:14px}
+
+.tabbar{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:blur(12px);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));z-index:20}
+.tabbar button,.side button.nav{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:11px;color:var(--muted);font-weight:500}
+.tabbar svg,.side svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+.tabbar button[aria-current="true"],.side button[aria-current="true"]{color:var(--accent)}
+.fab{position:fixed;right:16px;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:21;border:0;border-radius:999px;background:var(--accent);color:var(--card);font-weight:700;padding:14px 20px;box-shadow:0 8px 24px color-mix(in srgb,var(--accent) 35%,transparent)}
+
+.notice{background:var(--plan-soft);color:var(--plan);border-radius:10px;padding:8px 12px;font-size:13px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+.notice button{border:0;background:none;text-decoration:underline;color:inherit;font-size:13px;padding:0}
+
+.grid2{display:grid;gap:14px}
+section.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+h2{font-size:13px;letter-spacing:.12em;color:var(--muted);font-weight:700;margin:0 0 10px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+h2 b{font-family:var(--f-num);color:var(--ink);letter-spacing:0;font-size:14px}
+h3{font-family:var(--f-display);font-size:22px;margin:0;text-wrap:balance}
+.empty{color:var(--muted);font-size:14px;padding:6px 0}
+
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:0}
+.kpi span{display:block;font-size:11px;color:var(--muted);letter-spacing:.08em}
+.kpi b{font-family:var(--f-num);font-size:20px;font-weight:500}
+.kpi.due b{color:var(--due)}
+
+.row{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line);width:100%;text-align:left;background:none;border-left:0;border-right:0;border-bottom:0}
+.row:first-of-type{border-top:0}
+.when{flex:none;width:54px;text-align:center;line-height:1.25}
+.when b{display:block;font-family:var(--f-num);font-size:15px;font-weight:500}
+.when span{font-size:11px;color:var(--muted)}
+.what{flex:1;min-width:0}
+.what .nm{font-weight:700;display:flex;align-items:center;gap:6px}
+.what .sub{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.pill{flex:none;font-size:12px;font-weight:700;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.pill.paid{background:var(--paid-soft);color:var(--paid)}
+.pill.due{background:var(--due-soft);color:var(--due)}
+.pill.ticket{background:var(--accent-soft);color:var(--accent)}
+.pill.plan{background:var(--plan-soft);color:var(--plan)}
+.pill.warn{background:var(--plan-soft);color:var(--plan)}
+
+/* calendar */
+.calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.calhead button{border:0;background:var(--soft);border-radius:999px;width:36px;height:36px;font-size:18px}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.cal .dow{font-size:11px;text-align:center;color:var(--muted);padding-bottom:2px}
+.cal .d{min-height:58px;min-width:0;overflow:hidden;border:1px solid transparent;border-radius:9px;background:var(--soft);display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;padding:3px 2px;gap:2px;font-family:var(--f-num);font-size:12px;text-align:left}
+.cal .d .n{padding-left:3px;line-height:1.3}
+.cal .d.out{opacity:.35}
+.cal .d.today .n{color:var(--accent);font-weight:500}
+.cal .d.today{border-color:var(--accent)}
+.cal .d.sel{background:var(--accent-soft);border-color:var(--accent)}
+.ev{display:block;font-family:var(--f-body);font-size:10px;line-height:1.4;border-radius:4px;padding:0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
+.ev .t{display:none;font-family:var(--f-num);font-weight:400;margin-right:3px}
+.ev.paid{background:var(--paid-soft);color:var(--paid)} .ev.due{background:var(--due-soft);color:var(--due)} .ev.ticket{background:var(--accent-soft);color:var(--accent)} .ev.plan{background:var(--card);color:var(--plan);box-shadow:inset 0 0 0 1px var(--plan)} .ev.off{background:none;color:var(--muted);text-decoration:line-through;font-weight:400}
+.m{display:inline-block;width:10px;height:10px;border-radius:3px}
+.m.paid{background:var(--paid)} .m.due{background:var(--due)} .m.ticket{background:var(--accent)} .m.plan{box-shadow:inset 0 0 0 1.5px var(--plan)} .m.off{background:var(--line)}
+@media (min-width:700px){.cal .d{min-height:84px;padding:4px}.ev{font-size:11px;padding:1px 4px}.ev .t{display:inline}}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.legend span{display:flex;align-items:center;gap:5px}
+
+/* students */
+.stu{display:flex;gap:12px;align-items:center}
+.avatar{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff;flex:none}
+.meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.back{border:0;background:none;color:var(--accent);padding:0;margin-bottom:10px;font-weight:700}
+.pkg{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.pkg:first-of-type{border-top:0}
+.bar{height:8px;border-radius:99px;background:var(--soft);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.lognote{font-size:14px;white-space:pre-wrap;margin-top:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:13px}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--card)}
+.tag{font-size:12px;background:var(--soft);border-radius:6px;padding:1px 8px}
+
+/* money */
+.bars{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;align-items:end;height:150px;padding-top:18px;border-bottom:1px solid var(--line)}
+.bars div{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px;min-width:0}
+.bars i{display:block;width:70%;max-width:44px;background:var(--accent-soft);border-radius:6px 6px 0 0;min-height:2px}
+.bars div.cur i{background:var(--accent)}
+.bars small{font-family:var(--f-num);font-size:11px;color:var(--muted)}
+.bars em{font-style:normal;font-family:var(--f-num);font-size:11px}
+.blabels{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;text-align:center;font-size:12px;color:var(--muted);padding-top:4px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:8px 4px;border-top:1px solid var(--line);text-align:left}
+th{font-size:12px;color:var(--muted);font-weight:500;border-top:0}
+td.r,th.r{text-align:right;font-family:var(--f-num)}
+.tablewrap{overflow-x:auto}
+
+/* sheet */
+.overlay{position:fixed;inset:0;background:rgba(10,14,30,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:620px;max-height:92vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:0 16px calc(20px + env(safe-area-inset-bottom,0px))}
+.sheet .sh{position:sticky;top:0;background:var(--bg);display:flex;justify-content:space-between;align-items:center;padding:14px 0 10px;z-index:2;border-bottom:1px solid var(--line);margin-bottom:12px}
+.sheet .sh b{font-size:17px}
+.sheet .x{border:0;background:var(--soft);border-radius:999px;width:34px;height:34px;font-size:16px}
+.fld{display:grid;gap:6px;margin-bottom:14px}
+.fld>label,.fld>.lb{font-size:13px;font-weight:700;color:var(--muted)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr));gap:10px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--soft);border-radius:12px;padding:3px;gap:3px}
+.seg button{border:0;background:none;border-radius:9px;padding:9px 4px;font-weight:700;font-size:14px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.prev{background:var(--plan-soft);color:var(--ink);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:14px}
+.prev b{color:var(--plan);font-size:12px;display:block;letter-spacing:.06em}
+.paybox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:12px}
+.hint{font-size:13px;color:var(--muted)}
+.check{display:flex;gap:8px;align-items:center;font-weight:700;font-size:14px}
+.check input{width:20px;height:20px}
+
+.toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0px));transform:translate(-50%,-20px);opacity:0;background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:14px;font-weight:700;z-index:60;transition:.25s;max-width:calc(100% - 32px);text-align:center}
+.toast.on{transform:translate(-50%,0);opacity:1}
+.toast small{display:block;font-weight:400;opacity:.8;font-size:13px}
+
+.pill.off{background:var(--soft);color:var(--muted)}
+.pills{display:flex;flex-direction:column;gap:3px;align-items:flex-end;flex:none}
+.todo{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.todo:first-child{border-top:0}
+.todo input{width:20px;height:20px;flex:none;margin-top:2px}
+.todo .tx{flex:1;min-width:0;font-size:15px;white-space:pre-wrap}
+.todo.done .tx{color:var(--muted);text-decoration:line-through}
+.todo .del{border:0;background:none;color:var(--muted);font-size:13px;padding:2px 4px}
+.addrow{display:flex;gap:8px;margin-top:8px}
+.addrow input{flex:1;min-width:0}
+.radio{display:grid;gap:6px}
+.radio label{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px;cursor:pointer}
+.radio label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.radio input{width:18px;height:18px;margin-top:2px;flex:none}
+.radio small{display:block;color:var(--muted);font-size:12px}
+.planbox{font-size:14px;white-space:pre-wrap}
+.gear{border:0;background:var(--soft);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:700}
+.type{font-size:12px;font-weight:700;color:var(--accent);margin-left:4px}
+.vbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.vbar .grow{flex:1;min-width:120px}
+.vbar h3{font-size:19px}
+.navb{border:0;background:var(--soft);border-radius:999px;min-width:36px;height:36px;font-size:16px;padding:0 12px;font-weight:700}
+.vseg{display:flex;background:var(--soft);border-radius:10px;padding:3px;gap:2px}
+.vseg button{border:0;background:none;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--muted)}
+.vseg button[aria-pressed="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.tg{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.tg-head,.tg-all{display:grid;grid-template-columns:44px repeat(var(--n),minmax(0,1fr));border-bottom:1px solid var(--line)}
+.tg-head button{border:0;background:none;padding:6px 2px;text-align:center;font-size:11px;color:var(--muted)}
+.tg-head b{display:block;font-family:var(--f-num);font-size:18px;font-weight:500;color:var(--ink);width:32px;height:32px;line-height:32px;margin:0 auto;border-radius:999px}
+.tg-head .today b{background:var(--accent);color:var(--card)}
+.tg-all>div{min-height:26px;padding:2px;border-left:1px solid var(--line);display:flex;flex-direction:column;gap:2px;min-width:0}
+.tg-all .lab{border-left:0;font-size:10px;color:var(--muted);text-align:right;padding:6px 6px 0 0}
+.tg-body{height:min(66vh,640px);overflow-y:auto;position:relative;overscroll-behavior:contain}
+.tg-grid{display:grid;grid-template-columns:44px repeat(var(--n),minmax(0,1fr));position:relative;height:calc(var(--h) * 24)}
+.tg-times{position:relative}
+.tg-times span{position:absolute;right:6px;transform:translateY(-50%);font-size:10px;color:var(--muted);font-family:var(--f-num)}
+.tg-col{position:relative;border-left:1px solid var(--line);background-image:repeating-linear-gradient(to bottom,var(--line) 0 1px,transparent 1px var(--h));cursor:pointer;min-width:0}
+.tg-col.today{background-color:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
+.blk{position:absolute;border:0;border-radius:6px;padding:2px 5px;text-align:left;font-size:11px;line-height:1.3;overflow:hidden;font-weight:700;z-index:2}
+.blk small{display:block;font-weight:400;font-family:var(--f-num);font-size:10px;opacity:.85;white-space:nowrap}
+.blk.paid{background:var(--paid-soft);color:var(--paid)} .blk.due{background:var(--due-soft);color:var(--due)} .blk.ticket{background:var(--accent-soft);color:var(--accent)}
+.blk.plan{background:var(--card);color:var(--plan);box-shadow:inset 0 0 0 1.5px var(--plan)} .blk.off{background:var(--soft);color:var(--muted);text-decoration:line-through;font-weight:400}
+.blk.evt,.ev.evt{background:color-mix(in srgb,var(--c) 17%,var(--card));color:var(--c);box-shadow:inset 3px 0 0 var(--c)}
+.blk.allday{position:static;width:100%;padding:1px 5px}
+.now{position:absolute;left:0;right:0;height:2px;background:var(--due);z-index:3;pointer-events:none}
+.now::before{content:"";position:absolute;left:-5px;top:-4px;width:10px;height:10px;border-radius:50%;background:var(--due)}
+.pill.evt{background:color-mix(in srgb,var(--c) 16%,var(--card));color:var(--c)}
+.m.evt{background:var(--c)}
+.tsel{display:flex;align-items:center;gap:4px}
+.tsel select{width:auto;min-width:68px;padding:10px 8px}
+.tabs2{display:grid;grid-template-columns:1fr 1fr;background:var(--soft);border-radius:12px;padding:3px;gap:3px;margin-bottom:14px}
+.tabs2 button{border:0;background:none;border-radius:9px;padding:10px 4px;font-weight:700;color:var(--muted)}
+.tabs2 button[aria-pressed="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.ttl{font-size:20px;font-weight:700;border:0;border-bottom:2px solid var(--line);border-radius:0;padding:8px 2px;background:transparent}
+.ttl:focus{border-bottom-color:var(--accent);outline:none}
+.typechip{--c:var(--t-other)}
+.typechip[aria-pressed="true"]{background:var(--c);border-color:var(--c);color:var(--card)}
+@media (min-width:900px){
+  nav.side{display:flex;flex-direction:column;gap:4px;width:210px;flex:none;padding:22px 14px;border-right:1px solid var(--line);position:sticky;top:0;height:100vh}
+  nav.side .brand{margin:0 8px 22px}
+  .side button.nav{flex-direction:row;gap:10px;font-size:15px;padding:10px 12px;border-radius:10px;justify-content:flex-start}
+  .side button.nav[aria-current="true"]{background:var(--accent-soft)}
+  .side .btn{margin-top:16px}
+  .tabbar,.fab,header.top .brand{display:none}
+  main{padding-block:24px 40px;padding-inline:28px}
+  .grid2{grid-template-columns:1fr 1fr;align-items:start}
+  .overlay{align-items:center}
+  .sheet{border-radius:18px;max-height:88vh}
+}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <nav class="side" id="side"></nav>
+  <main id="main"></main>
+</div>
+<nav class="tabbar" id="tabbar"></nav>
+<button class="fab" id="fab" data-act="newEvent">＋</button>
+<div id="layer"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.min.js"></script>
+<script>
+/* ---------- ことば（日本語／English） ---------- */
+let LANGV='ja';
+const L=(ja,en)=>LANGV==='en'?en:ja;
+const DOW=['日','月','火','水','木','金','土'], DOW_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], DOW_LONG=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const METHOD_EN={'現金':'Cash','その他':'Other'};
+const REASON_EN={'生徒の都合':'Student conflict','体調不良':'Illness','こちらの都合':'Coach conflict','天候':'Weather','その他':'Other'};
+const WAZA_EN={'大外刈':'Osoto-gari','大内刈':'Ouchi-gari','小内刈':'Kouchi-gari','内股':'Uchi-mata','払腰':'Harai-goshi','背負投':'Seoi-nage','体落':'Tai-otoshi','袖釣込腰':'Sode-tsurikomi-goshi','小外刈':'Kosoto-gari','出足払':'Deashi-harai','巴投':'Tomoe-nage',
+  '袈裟固':'Kesa-gatame','横四方固':'Yoko-shiho-gatame','上四方固':'Kami-shiho-gatame','縦四方固':'Tate-shiho-gatame','腕挫十字固':'Juji-gatame','送襟絞':'Okuri-eri-jime','寝技の返し':'Ne-waza turnovers',
+  '受身':'Ukemi','打ち込み':'Uchikomi','乱取り':'Randori','組み手':'Grip fighting','体力づくり':'Conditioning','試合の作戦':'Match strategy'};
+const WAZA_GROUP_EN={'立ち技':'Standing (nage-waza)','寝技':'Groundwork (ne-waza)','その他':'Other'};
+const tMethod=m=>L(m,METHOD_EN[m]||m), tReason=r=>L(r,REASON_EN[r]||r), tWaza=w=>L(w,WAZA_EN[w]||w);
+const EVT=[['practice','練習','Practice','--t-practice'],['match','試合・大会','Tournament','--t-match'],['referee','審判','Refereeing','--t-ref'],['seminar','講習会','Clinic','--t-sem'],['exam','昇段審査','Promotion exam','--t-exam'],['travel','遠征','Travel','--t-travel'],['other','その他','Other','--t-other']];
+const evtInfo=t=>EVT.find(x=>x[0]===t)||EVT[6];
+const evtName=t=>{const e=evtInfo(t);return L(e[1],e[2])};
+const evtColor=t=>`var(${evtInfo(t)[3]})`;
+
+/* ---------- データ ---------- */
+const COLORS=['#34449a','#b5542b','#1d845a','#7a4bb0','#0f7f8c','#a3367a','#5f6b1e'];
+const METHODS=['現金','Zelle','Venmo','その他'];
+const REASONS=['生徒の都合','体調不良','こちらの都合','天候','その他'];
+const WAZA={'立ち技':['大外刈','大内刈','小内刈','内股','払腰','背負投','体落','袖釣込腰','小外刈','出足払','巴投'],'寝技':['袈裟固','横四方固','上四方固','縦四方固','腕挫十字固','送襟絞','寝技の返し'],'その他':['受身','打ち込み','乱取り','組み手','体力づくり','試合の作戦']};
+
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today=()=>ymd(new Date());
+const parse=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const addDays=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return ymd(d)};
+const md=s=>{const d=parse(s);return `${d.getMonth()+1}/${d.getDate()}`};
+const dow=s=>L(DOW,DOW_EN)[parse(s).getDay()];
+const dl=s=>L(`${md(s)}(${dow(s)})`,`${dow(s)} ${md(s)}`);
+const ymTitle=(y,m)=>L(`${y}年${m}月`,new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}));
+const mShort=m=>L(`${m}月`,new Date(2000,m-1,1).toLocaleDateString('en-US',{month:'short'}));
+const money=n=>'$'+Number(n||0).toLocaleString('en-US');
+const uid=()=>Math.random().toString(36).slice(2,10);
+const toMin=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+(m||0)};
+const fromMin=n=>{n=Math.max(0,Math.min(n,23*60+55));return `${pad(Math.floor(n/60))}:${pad(n%60)}`};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const N=(n,ja,en1,enN)=>L(`${n}${ja}`,`${n} ${n===1?en1:(enN||en1+'s')}`);
+const shortName=n=>n.replace(/（.*?）|\s*\(.*?\)/g,'');
+
+/* 料金：マンツーマンは30分あたり、ペアは1時間あたり（2人の合計を半分ずつ） */
+function priceFor(sid,dur,n){
+  if(n>=2)return Math.round(S.settings.pair60*dur/60/n);
+  const s=stu(sid);return Math.round((s.custom30??S.settings.solo30)*dur/30);
+}
+
+const stu=id=>S.students.find(s=>s.id===id)||{id,name:L('（削除された生徒）','(deleted student)'),color:'#888',custom30:null,dur:60,todos:[]};
+const byId=id=>S.lessons.find(l=>l.id===id);
+const done=()=>S.lessons.filter(l=>l.status==='done');
+const used=pid=>S.lessons.filter(l=>l.status==='done'&&l.pay.mode==='ticket'&&l.pay.pid===pid).length;
+const left=p=>p.count-used(p.id);
+const activePkg=sid=>S.packages.filter(p=>p.sid===sid&&left(p)>0).sort((a,b)=>a.date.localeCompare(b.date));
+const ticketNo=l=>{const own=sortL(S.lessons.filter(x=>x.status==='done'&&x.pay.mode==='ticket'&&x.pay.pid===l.pay.pid));return own.indexOf(l)+1};
+const group=l=>l.gid?S.lessons.filter(x=>x.gid===l.gid):[l];
+const names=ls=>ls.map(l=>stu(l.sid).name).join(L('・',' & '));
+const dedupe=ls=>{const seen=new Set();return ls.filter(l=>{if(!l.gid)return true;if(seen.has(l.gid))return false;seen.add(l.gid);return true})};
+const sortL=a=>a.sort((x,y)=>(x.date+x.time).localeCompare(y.date+y.time));
+const pendingOf=sid=>sortL(S.lessons.filter(l=>l.sid===sid&&l.status==='cancelled'&&l.cancel?.carry==='pending'));
+const isUnpaid=l=>l.status!=='planned'&&l.pay.mode==='per'&&!l.pay.paid&&+l.pay.amount>0&&l.cancel?.carry!=='pending';
+const unpaidLessons=()=>sortL(S.lessons.filter(isUnpaid));
+const unpaidPkgs=()=>S.packages.filter(p=>!p.paid);
+const lastDone=sid=>sortL(S.lessons.filter(x=>x.sid===sid&&x.status==='done')).pop();
+
+/* ---------- 保存（Supabase：柔道ノートと同じ場所。表は ms_items、コーチ本人だけ読み書きできる） ---------- */
+const SUPABASE_URL='https://ktwunswfyxozcultprnq.supabase.co';
+const SUPABASE_KEY='sb_publishable_P_UMeGV4gB54MjRBfjUIrA_E7drptd5';   // 公開用のキー（アプリに入れてよい値）
+const VAPID_PUBLIC='BChblwq2SoS3NVeX2FjxGFMSOeHKVrf0K7fiwRVWOb0NFEEOZW772YZGAr2dJ_ZGAU4eRwGFpdcNNkF9cP6XHnE';
+const ID_DOMAIN='players.judo-note.app';   // 柔道ノートと同じ ID でログインする
+const idToEmail=id=>`${id.trim().toLowerCase()}@${ID_DOMAIN}`;
+/* 通信は25秒で打ち切る（電波が弱いと「保存中…」のまま固まって見えるため） */
+function fetchT(url,opts={}){const c=new AbortController(),tm=setTimeout(()=>c.abort(),25000);
+  if(opts.signal){if(opts.signal.aborted)c.abort();else opts.signal.addEventListener('abort',()=>c.abort(),{once:true})}
+  return fetch(url,{...opts,signal:c.signal}).finally(()=>clearTimeout(tm))}
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'my-schedule-auth'},global:{fetch:fetchT}});
+
+const deviceTz=()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Los_Angeles'}catch(e){return 'America/Los_Angeles'}};
+const defaultSettings=()=>({solo30:50,pair60:100,lang:LANGV,remind:'21:00',tz:deviceTz()});
+const emptyState=()=>({settings:defaultSettings(),students:[],packages:[],lessons:[],events:[]});
+let S=emptyState(), SNAP=new Map(), SESSION=null, LOADED=false, DIRTY=false;
+const KINDS=[['students','student'],['lessons','lesson'],['events','event'],['packages','package']];
+function itemsMap(st){
+  const m=new Map([['settings|main',JSON.stringify(st.settings)]]);
+  KINDS.forEach(([arr,k])=>st[arr].forEach(o=>m.set(`${k}|${o.id}`,JSON.stringify(o))));
+  return m;
+}
+function fromRows(rows){
+  const st=emptyState();
+  rows.forEach(r=>{if(r.kind==='settings')st.settings={...defaultSettings(),...r.data};else{const a=KINDS.find(x=>x[1]===r.kind);if(a)st[a[0]].push(r.data)}});
+  return st;
+}
+/* この端末にも控えを置く（電波がなくても開けるように・すぐ表示できるように） */
+const cacheKey=()=>'my-schedule-cache-'+(SESSION?.uid||'');
+function writeCache(){try{localStorage.setItem(cacheKey(),JSON.stringify({S,snap:[...SNAP],dirty:DIRTY}))}catch(e){}}
+function readCache(){try{const c=JSON.parse(localStorage.getItem(cacheKey())||'null');return c&&c.S?c:null}catch(e){return null}}
+
+/* 変わった分だけ送る（生徒・レッスン・予定を1件ずつ） */
+async function pushChanges(){
+  if(!SESSION)return;
+  const cur=itemsMap(S), up=[], del=[];
+  cur.forEach((v,k)=>{if(SNAP.get(k)!==v){const [kind,id]=k.split('|');up.push({owner:SESSION.uid,kind,id,data:JSON.parse(v),_k:k,_v:v})}});
+  SNAP.forEach((v,k)=>{if(!cur.has(k))del.push(k)});
+  if(!up.length&&!del.length){DIRTY=false;writeCache();updSync();return}
+  for(let i=0;i<up.length;i+=300){
+    const part=up.slice(i,i+300);
+    const {error}=await sb.from('ms_items').upsert(part.map(({_k,_v,...r})=>r),{onConflict:'owner,kind,id'});
+    if(error)throw error;
+    part.forEach(r=>SNAP.set(r._k,r._v));
+  }
+  const byKind={};del.forEach(k=>{const [kind,id]=k.split('|');(byKind[kind]=byKind[kind]||[]).push(id)});
+  for(const [kind,ids] of Object.entries(byKind)){
+    for(let i=0;i<ids.length;i+=200){
+      const {error}=await sb.from('ms_items').delete().eq('kind',kind).in('id',ids.slice(i,i+200));
+      if(error)throw error;
+      ids.slice(i,i+200).forEach(id=>SNAP.delete(`${kind}|${id}`));
+    }
+  }
+  DIRTY=false;writeCache();updSync();
+}
+let syncChain=Promise.resolve();
+function save(){
+  DIRTY=true;writeCache();
+  syncChain=syncChain.catch(()=>{}).then(pushChanges).catch(e=>{DIRTY=true;writeCache();updSync();throw e});
+  return syncChain;
+}
+/* ほかの端末で変えた分を読み込む（未送信の変更があるときは、先にこちらを送る） */
+async function pull(){
+  if(!SESSION)return;
+  if(DIRTY){try{await save()}catch(e){return}}
+  const {data,error}=await sb.from('ms_items').select('kind,id,data');
+  if(error){updSync(true);return}
+  const st=fromRows(data||[]);
+  const changed=JSON.stringify([...itemsMap(st)].sort())!==JSON.stringify([...SNAP].sort())||!LOADED;
+  S=st;SNAP=itemsMap(st);LOADED=true;
+  LANGV=S.settings.lang||LANGV;
+  let fix=false;
+  if(!data.some(r=>r.kind==='settings')){fix=true;SNAP.delete('settings|main')}
+  if(S.settings.tz!==deviceTz()){S.settings.tz=deviceTz();fix=true}
+  writeCache();
+  if(changed&&!g('layer').innerHTML)render();else updSync();
+  if(fix)save().catch(()=>{});
+}
+function updSync(bad){const el=g('sync');if(!el)return;const b=bad||DIRTY;el.className='sync'+(b?' bad':'');el.textContent=b?L('未送信の変更があります（つながると送ります）','Unsent changes (will send when online)'):''}
+addEventListener('online',()=>{if(DIRTY)save().then(()=>toast(L('✓ 未送信の変更を送りました','✓ Unsent changes saved'))).catch(()=>{})});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&SESSION)pull()});
+
+/* ---------- ログイン（柔道ノートのコーチの ID とパスワード） ---------- */
+async function enter(user){
+  const {data:prof,error}=await sb.from('profiles').select('id,role,login_id,display_name').eq('id',user.id).maybeSingle();
+  if(error){UI.loginErr=L('通信できませんでした。電波を確認してください。','Could not connect. Check your connection.');SESSION=null;render();return}
+  if(!prof||prof.role!=='coach'){await sb.auth.signOut();SESSION=null;UI.loginErr=L('My schedule はコーチだけが使えます。','My schedule is for coaches only.');render();return}
+  SESSION={uid:user.id,login:prof.login_id,name:prof.display_name};
+  const c=readCache();
+  if(c){S=c.S;SNAP=new Map(c.snap);DIRTY=!!c.dirty;LANGV=S.settings.lang||LANGV;LOADED=true}else{S=emptyState();SNAP=new Map();LOADED=false}
+  render();
+  await pull();
+  refreshPushState();
+}
+async function start(){
+  try{LANGV=localStorage.getItem('my-schedule-lang')||'ja'}catch(e){}
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){render();return}
+  await enter(session.user);
+}
+function loginView(){
+  return `<div class="login">${brand()}
+    <section class="card">
+      <div class="fld" style="margin:0"><label for="lg-id">${L('ID（柔道ノートと同じ）','ID (same as Judo Note)')}</label><input id="lg-id" autocomplete="username" autocapitalize="none" spellcheck="false"></div>
+      <div class="fld" style="margin:0"><label for="lg-pw">${L('パスワード','Password')}</label><input id="lg-pw" type="password" autocomplete="current-password"></div>
+      ${UI.loginErr?`<div class="err">${esc(UI.loginErr)}</div>`:''}
+      <button class="btn block" data-act="login" ${UI.busy?'disabled':''}>${UI.busy?L('ログイン中…','Signing in…'):L('ログイン','Sign in')}</button>
+      <p class="hint" style="margin:0">${L('柔道ノートのコーチのIDとパスワードで入れます。選手・保護者のIDでは入れません。','Use your Judo Note coach ID and password. Athlete and parent IDs can’t sign in.')}</p>
+    </section>
+    <div class="vseg" style="justify-self:center">${[['ja','日本語'],['en','English']].map(([k,n])=>`<button data-act="loginLang" data-v="${k}" aria-pressed="${LANGV===k}">${n}</button>`).join('')}</div>
+  </div>`;
+}
+
+/* ---------- 通知（前の日の夜に翌日の予定） ---------- */
+const pushSupported=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+function b64ToU8(x){const b=atob((x+'='.repeat((4-x.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,c=>c.charCodeAt(0))}
+async function pushState(){
+  if(!pushSupported())return isIOS&&!standalone()?'ios':'unsupported';
+  if(Notification.permission==='denied')return 'denied';
+  const reg=await navigator.serviceWorker.getRegistration();const sub=reg&&await reg.pushManager.getSubscription();
+  if(!sub)return 'off';
+  const {data}=await sb.from('ms_push_subs').select('endpoint').eq('endpoint',sub.endpoint);
+  return data&&data.length?'on':'off';
+}
+async function refreshPushState(){try{UI.pushState=await pushState()}catch(e){UI.pushState='unsupported'}if(g('push-box'))g('push-box').innerHTML=pushBox()}
+async function enablePush(){
+  const perm=await Notification.requestPermission();if(perm!=='granted')throw new Error(L('通知が許可されませんでした','Notifications were not allowed'));
+  const reg=await navigator.serviceWorker.register('sw.js');await navigator.serviceWorker.ready;
+  const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(VAPID_PUBLIC)});
+  const j=sub.toJSON();const {error}=await sb.rpc('ms_claim_push',{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth});if(error)throw error;
+}
+async function disablePush(){const reg=await navigator.serviceWorker.getRegistration();const sub=reg&&await reg.pushManager.getSubscription();if(sub){await sb.from('ms_push_subs').delete().eq('endpoint',sub.endpoint);await sub.unsubscribe()}}
+function pushBox(){
+  const st=UI.pushState;
+  return st==='on'?`<div class="chips" style="align-items:center"><span class="pill paid">${L('この端末で受け取る','On for this device')}</span><button class="btn sm ghost" data-act="pushTest">${L('テスト通知','Send test')}</button><button class="btn sm ghost" data-act="pushTomorrow">${L('明日の予定を今すぐ送る','Send tomorrow now')}</button><button class="btn sm ghost" data-act="pushOff" style="color:var(--due)">${L('この端末ではやめる','Turn off here')}</button></div>`
+    :st==='off'?`<button class="btn sm" data-act="pushOn">${L('この端末で通知を受け取る','Get notifications on this device')}</button>`
+    :st==='ios'?`<div class="hint">${L('iPhone・iPadでは、Safariの共有ボタン →「ホーム画面に追加」で追加したアプリから開くと、ここで通知をオンにできます。','On iPhone/iPad, add this app to your Home Screen (Safari share button → Add to Home Screen) and open it from there to turn on notifications.')}</div>`
+    :st==='denied'?`<div class="hint" style="color:var(--due)">${L('この端末では通知がブロックされています。本体の設定で、このアプリの通知を許可してください。','Notifications are blocked on this device. Allow them for this app in the device settings.')}</div>`
+    :st==='unsupported'?`<div class="hint">${L('このブラウザは通知に対応していません。','This browser doesn’t support notifications.')}</div>`:`<div class="hint">${L('確認中…','Checking…')}</div>`;
+}
+
+/* お金の流れ：受け取った日で数える */
+function income(){
+  const rows=[];
+  S.lessons.forEach(l=>{if(l.pay.mode==='per'&&l.pay.paid)rows.push({date:l.pay.paidOn||l.date,sid:l.sid,kind:l.status==='cancelled'?L('キャンセル料','Cancellation fee'):l.gid?L('ペアレッスン','Pair lesson'):L('レッスン','Lesson'),lessonDate:l.date,amount:+l.pay.amount,method:l.pay.method})});
+  S.packages.forEach(p=>{if(p.paid)rows.push({date:p.paidOn||p.date,sid:p.sid,kind:L(`回数券 ${p.count}回`,`${p.count}-lesson pack`),lessonDate:'',amount:+p.price,method:p.method})});
+  return rows.sort((a,b)=>a.date.localeCompare(b.date));
+}
+
+/* ---------- 画面の状態 ---------- */
+const UI={view:innerWidth<700?'3day':'week',anchor:today(),filter:'all',hfilter:'all',tgScroll:null,tab:'home',cal:today().slice(0,7),day:today(),sid:null,scal:today().slice(0,7),sday:null,month:today().slice(0,7),showDone:false};
+const ICON={
+  home:'<svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+  cal:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  stu:'<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.3 0 4 1.5 4.6 4"/></svg>',
+  money:'<svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.8"/><path d="M6 9.5v5M18 9.5v5"/></svg>'};
+const TABS=()=>[['home',L('ホーム','Home')],['cal',L('カレンダー','Calendar')],['stu',L('生徒','Students')],['money',L('売上','Income')]];
+const FILTERS=()=>[['all',L('すべて','All')],['lesson',L('プライベート','Private')],['event',L('柔道の予定','Judo events')]];
+const brand=()=>`<div class="brand">My schedule<small>${L('プライベートレッスン・柔道','PRIVATE LESSONS · JUDO')}</small></div>`;
+
+function render(){
+  document.documentElement.lang=LANGV;
+  const out=!SESSION;
+  g('tabbar').hidden=out;g('fab').hidden=out;g('side').hidden=out;
+  if(out){g('main').innerHTML=loginView();return}
+  if(!LOADED){g('main').innerHTML=`<div class="loading">${L('読み込み中…','Loading…')}</div>`;return}
+  const nav=TABS().map(([k,n])=>`<button class="nav" data-act="tab" data-v="${k}" aria-current="${UI.tab===k}">${ICON[k]}<span>${n}</span></button>`).join('');
+  g('tabbar').innerHTML=nav;
+  g('fab').textContent=L('＋ 予定','＋ Event');
+  g('side').innerHTML=`${brand()}${nav}<button class="btn" data-act="newEvent">${L('＋ 予定を追加','＋ Add event')}</button><button class="btn ghost" data-act="newLesson" style="margin-top:8px">${L('＋ レッスンを記録','＋ Log a lesson')}</button><button class="gear" data-act="settings" style="margin-top:auto">${L('設定（料金・言語）','Settings (rates, language)')}</button>`;
+  const prevTg=g('tgb');if(prevTg)UI.tgScroll=prevTg.scrollTop;
+  const v={home,cal,stu:UI.sid?stuDetail:stuList,money:moneyView}[UI.tab]();
+  g('main').innerHTML=`<header class="top">${brand()}<button class="gear" data-act="settings">${L('設定','Settings')}</button></header><div class="sync" id="sync"></div>${v}`;
+  updSync();
+  const tg=g('tgb');
+  if(tg){if(UI.tgScroll==null){const st=viewDays().flatMap(d=>itemsOn(d).filter(i=>!i.allDay).map(i=>i.start));UI.tgScroll=Math.max(0,((st.length?Math.min(...st):8*60)-30)*HOUR/60)}
+    tg.scrollTop=UI.tgScroll;tg.addEventListener('scroll',()=>UI.tgScroll=tg.scrollTop,{passive:true})}
+}
+function segHtml(act,cur){return `<div class="vseg">${FILTERS().map(([k,n])=>`<button data-act="${act}" data-v="${k}" aria-pressed="${cur===k}">${n}</button>`).join('')}</div>`}
+
+/* 状態ごとの見た目 */
+function stateOf(l){
+  if(l.status==='cancelled')return 'off';
+  if(l.status==='planned')return 'plan';
+  if(l.pay.mode==='ticket')return 'ticket';
+  if(l.pay.mode==='per')return l.pay.paid?'paid':(+l.pay.amount>0?'due':'paid');
+  return 'paid';
+}
+function payPill(l){
+  if(l.status==='cancelled'){
+    const c=l.cancel||{};
+    if(c.carry==='moved'){const t=byId(c.to);return `<span class="pill off">${L('キャンセル','Cancelled')} → ${t?md(t.date):L('振替','make-up')}</span>`}
+    if(c.carry==='pending')return `<span class="pill warn">${L('キャンセル・振替待ち','Cancelled · make-up TBD')}</span>`;
+    if(l.pay.mode==='per'&&+l.pay.amount>0)return `<span class="pill ${l.pay.paid?'off':'due'}">${L('キャンセル料','Cancel fee')} ${money(l.pay.amount)}</span>`;
+    return `<span class="pill off">${L('キャンセル','Cancelled')}</span>`;
+  }
+  if(l.status==='planned')return `<span class="pill plan">${l.pay.mode==='per'&&l.pay.paid?L('予定・前払い済み','Scheduled · prepaid'):L('予定','Scheduled')}</span>`;
+  if(l.pay.mode==='ticket'){const p=S.packages.find(x=>x.id===l.pay.pid);return `<span class="pill ticket">${L('回数券','Pack')} ${ticketNo(l)}/${p?p.count:'?'}</span>`}
+  if(l.pay.mode==='per')return l.pay.paid?`<span class="pill paid">${L('支払い済み','Paid')}</span>`:`<span class="pill due">${L('未払い','Unpaid')} ${money(l.pay.amount)}</span>`;
+  return '';
+}
+function lessonRow(l,showDate=true,onlySid=null){
+  const grp=onlySid?[l]:group(l);
+  const s=stu(l.sid);
+  let sub;
+  if(l.status==='cancelled')sub=L(`${tReason(l.cancel?.reason||'')}でキャンセル`,`Cancelled: ${tReason(l.cancel?.reason||'')}`)+(l.plan?` ｜ ${L('予定','Plan')}: ${l.plan}`:'');
+  else if(l.status==='planned')sub=l.plan?`${L('予定','Plan')}: ${l.plan}`:`${l.time}– ${l.dur}${L('分',' min')}`;
+  else sub=(l.waza.length?l.waza.map(tWaza).join(L('・',', ')):'')+(l.content?` ｜ ${l.content}`:'');
+  const pair=!onlySid&&grp.length>1;
+  return `<button class="row" data-act="openLesson" data-id="${l.id}">
+    <div class="when">${showDate?`<b>${md(l.date)}</b><span>${dow(l.date)} ${l.time}</span>`:`<b>${l.time}</b><span>${l.dur}${L('分',' min')}</span>`}</div>
+    <div class="what"><div class="nm" style="${l.status==='cancelled'?'color:var(--muted)':''}"><i class="dot" style="background:${s.color}"></i>${esc(onlySid?s.name:names(grp))}${l.gid?`<span class="type">${L('ペア','Pair')}</span>`:''}</div><div class="sub">${esc(sub)||L('内容はまだ書いていません','No notes yet')}</div></div>
+    <div class="pills">${(pair?grp:[l]).map(x=>pair&&x.status!=='planned'&&x.status!=='cancelled'?payPill(x).replace('">','">'+esc(shortName(stu(x.sid).name))+' '):payPill(x)).filter((v,i,a)=>a.indexOf(v)===i).join('')}</div></button>`;
+}
+
+/* ホーム */
+function home(){
+  const t=today(), m=t.slice(0,7);
+  const todays=itemsOn(t,'all');
+  const upcoming=[];for(let i=1;i<=90&&upcoming.length<6;i++)itemsOn(addDays(t,i),UI.hfilter).forEach(it=>{if(upcoming.length<6&&(it.kind==='event'||it.o.status==='planned'))upcoming.push(it)});
+  const unp=unpaidLessons(), unpP=unpaidPkgs();
+  const dueTotal=unp.reduce((a,l)=>a+ +l.pay.amount,0)+unpP.reduce((a,p)=>a+ +p.price,0);
+  const monthIn=income().filter(r=>r.date.startsWith(m)).reduce((a,r)=>a+r.amount,0);
+  const monthCount=dedupe(done().filter(l=>l.date.startsWith(m))).length;
+  const low=S.students.map(s=>{const ps=S.packages.filter(p=>p.sid===s.id);if(!ps.length)return null;const rem=ps.reduce((a,p)=>a+Math.max(0,left(p)),0);return rem<=2?{s,rem}:null}).filter(Boolean);
+  const pend=S.lessons.filter(l=>l.status==='cancelled'&&l.cancel?.carry==='pending');
+  const by={};unp.forEach(l=>{(by[l.sid]=by[l.sid]||{items:[],total:0}).items.push(l);by[l.sid].total+= +l.pay.amount});
+  const dueHtml=Object.entries(by).map(([sid,gr])=>{const s=stu(sid);return `<div class="row" style="align-items:flex-start">
+      <div class="avatar" style="background:${s.color}">${esc(s.name[0])}</div>
+      <div class="what"><div class="nm">${esc(s.name)} <span class="num" style="color:var(--due)">${money(gr.total)}</span></div>
+      <div class="sub" style="white-space:normal">${gr.items.map(l=>dl(l.date)+(l.status==='cancelled'?L('キャンセル料',' cancel fee'):'')).join(L('、',', '))} ${L(`の ${gr.items.length}回分`,`· ${N(gr.items.length,'','lesson')}`)}</div></div>
+      <button class="btn sm paid" data-act="receive" data-sid="${sid}">${L('受け取った','Received')}</button></div>`}).join('')
+    +unpP.map(p=>{const s=stu(p.sid);return `<div class="row"><div class="avatar" style="background:${s.color}">${esc(s.name[0])}</div><div class="what"><div class="nm">${esc(s.name)} <span class="num" style="color:var(--due)">${money(p.price)}</span></div><div class="sub">${L(`回数券 ${p.count}回分（${md(p.date)}）`,`${p.count}-lesson pack (${md(p.date)})`)}</div></div><button class="btn sm paid" data-act="receivePkg" data-id="${p.id}">${L('受け取った','Received')}</button></div>`}).join('');
+  const welcome=!S.students.length&&!S.events.length?`<section class="card" style="margin-bottom:14px"><h2>${L('ようこそ','Welcome')}</h2><p style="margin:0 0 10px">${L('まず生徒を登録して、レッスンや柔道の予定を入れていきましょう。','Start by adding your students, then schedule lessons and judo events.')}</p><div class="chips"><button class="btn sm" data-act="tab" data-v="stu">${L('＋ 生徒を追加','＋ Add student')}</button><button class="btn sm ghost" data-act="newEvent" data-kind="event">${L('＋ 柔道の予定を追加','＋ Add judo event')}</button></div></section>`:'';
+  return `${welcome}
+  <div class="kpis">
+    <div class="kpi"><span>${L('今月の受け取り','Received this month')}</span><b>${money(monthIn)}</b></div>
+    <div class="kpi"><span>${L('今月のレッスン','Lessons this month')}</span><b>${monthCount}</b></div>
+    <div class="kpi due"><span>${L('未払い','Unpaid')}</span><b>${money(dueTotal)}</b></div>
+  </div>
+  <div class="grid2">
+    <div style="display:grid;gap:14px">
+      <section class="card"><h2>${L('今日','Today')} ${dl(t)}</h2>${todays.length?todays.map(it=>itemRow(it,false)).join(''):`<div class="empty">${L('今日の予定はありません。','Nothing scheduled today.')}</div>`}<div style="margin-top:8px"><button class="btn sm ghost" data-act="newLesson">${L('＋ 終わったレッスンを記録','＋ Log a finished lesson')}</button></div></section>
+      <section class="card"><h2>${L('次の予定','Coming up')} <button class="btn sm ghost" data-act="tab" data-v="cal">${L('カレンダー','Calendar')}</button></h2>
+        <div style="margin-bottom:6px">${segHtml('hfilter',UI.hfilter)}</div>
+        ${upcoming.length?upcoming.map(it=>itemRow(it,true)).join(''):`<div class="empty">${UI.hfilter==='lesson'?L('プライベートレッスンの予定はありません。','No private lessons scheduled.'):UI.hfilter==='event'?L('柔道の予定はありません。','No judo events scheduled.'):L('予定はまだありません。「＋ 予定」から入れられます。','Nothing scheduled yet. Use “＋ Event” to add one.')}</div>`}
+        <div style="margin-top:8px"><button class="btn sm ghost" data-act="newEvent" data-kind="${UI.hfilter==='event'?'event':'lesson'}">${UI.hfilter==='event'?L('＋ 柔道の予定を追加','＋ Add judo event'):L('＋ 予定を追加','＋ Add event')}</button></div></section>
+    </div>
+    <div style="display:grid;gap:14px">
+      <section class="card"><h2>${L('まだいただいていない代金','Payments due')} <b>${money(dueTotal)}</b></h2>${dueHtml||`<div class="empty">${L('未払いはありません。','Nothing unpaid.')}</div>`}</section>
+      ${pend.length?`<section class="card"><h2>${L('振替の日にちが決まっていない','Make-ups to schedule')}</h2>${pend.map(l=>{const s=stu(l.sid);return `<div class="row"><div class="avatar" style="background:${s.color}">${esc(s.name[0])}</div><div class="what"><div class="nm">${esc(s.name)}</div><div class="sub">${dl(l.date)} ${L(`${tReason(l.cancel.reason)}でキャンセル`,`cancelled (${tReason(l.cancel.reason)})`)}${l.pay.mode==='ticket'?L('・回数券は減っていません',' · pack not used'):l.pay.paid?L('・前払い済み',' · prepaid'):''}</div></div><button class="btn sm" data-act="schedCarry" data-id="${l.id}">${L('日にちを決める','Schedule')}</button></div>`}).join('')}<p class="hint" style="margin:8px 0 0">${L('次にその生徒のレッスンを入れると、自動でこの振替として扱います。','The next lesson you add for that student is automatically treated as the make-up.')}</p></section>`:''}
+      ${low.length?`<section class="card"><h2>${L('回数券の残りが少ない生徒','Packs running low')}</h2>${low.map(({s,rem})=>`<button class="row" data-act="openStu" data-id="${s.id}"><div class="avatar" style="background:${s.color}">${esc(s.name[0])}</div><div class="what"><div class="nm">${esc(s.name)}</div><div class="sub">${L('次の回数券のご案内を','Time to offer the next pack')}</div></div><span class="pill warn">${L(`残り ${rem}回`,`${rem} left`)}</span></button>`).join('')}</section>`:''}
+    </div>
+  </div>`;
+}
+
+/* 予定の一覧（レッスン＋柔道の予定） */
+function itemsOn(date,filter=UI.filter){
+  const out=[];
+  if(filter!=='event')dedupe(sortL(S.lessons.filter(l=>l.date===date))).forEach(l=>out.push({kind:'lesson',o:l,allDay:false,start:toMin(l.time),end:toMin(l.time)+l.dur,label:shortName(names(group(l))),cls:stateOf(l)}));
+  if(filter!=='lesson')S.events.filter(e=>e.date===date||(e.allDay&&e.edate&&e.date<=date&&date<=e.edate)).forEach(e=>out.push({kind:'event',o:e,allDay:e.allDay,start:e.allDay?-1:toMin(e.time),end:e.allDay?-1:toMin(e.time)+e.dur,label:e.title,cls:'evt',c:evtColor(e.type)}));
+  return out.sort((a,b)=>a.start-b.start);
+}
+const timeRange=it=>it.allDay?L('終日','All day'):`${fromMin(it.start)}–${fromMin(it.end)}`;
+function eventRow(e,showDate){
+  const c=evtColor(e.type), ad=L('終日','All day');
+  return `<button class="row" data-act="openEvent" data-id="${e.id}">
+    <div class="when">${showDate?`<b>${md(e.date)}</b><span>${dow(e.date)} ${e.allDay?ad:e.time}</span>`:`<b>${e.allDay?ad:e.time}</b><span>${e.allDay?'':e.dur+L('分',' min')}</span>`}</div>
+    <div class="what"><div class="nm"><i class="dot" style="background:${c}"></i>${esc(e.title)}${e.seriesId?'<span class="type" style="color:var(--muted)">↻</span>':''}</div><div class="sub">${esc([e.allDay&&e.edate?`〜${md(e.edate)}`:'',e.place,e.memo].filter(Boolean).join(' ｜ '))||(e.allDay?ad:`${e.time}–${fromMin(toMin(e.time)+e.dur)}`)}</div></div>
+    <span class="pill evt" style="--c:${c}">${evtName(e.type)}</span></button>`;
+}
+const itemRow=(it,showDate)=>it.kind==='lesson'?lessonRow(it.o,showDate):eventRow(it.o,showDate);
+
+/* 月のカレンダー（全体と生徒ごとで共通） */
+function calendar(monthKey,sel,sid){
+  const [y,m]=monthKey.split('-').map(Number);
+  const first=new Date(y,m-1,1), start=new Date(first);start.setDate(1-first.getDay());
+  let cells='';
+  for(let i=0;i<42;i++){
+    const d=new Date(start);d.setDate(start.getDate()+i);const k=ymd(d);
+    if(i>=35&&d.getMonth()!==m-1)break;
+    let evs,cnt;
+    if(sid){const ls=sortL(S.lessons.filter(l=>l.date===k&&l.sid===sid));cnt=ls.length;
+      evs=ls.slice(0,3).map(l=>`<span class="ev ${stateOf(l)}"><span class="t">${l.time}</span>${l.status==='cancelled'?L('休','Off'):l.status==='planned'?L('予定','Plan'):'✓'}</span>`).join('')}
+    else{const its=itemsOn(k);cnt=its.length;
+      evs=its.slice(0,3).map(it=>`<span class="ev ${it.cls}" ${it.c?`style="--c:${it.c}"`:''}>${it.allDay?'':`<span class="t">${fromMin(it.start)}</span>`}${esc(it.label)}</span>`).join('')+(its.length>3?`<span class="ev">+${its.length-3}</span>`:'')}
+    cells+=`<button class="d ${d.getMonth()!==m-1?'out':''} ${k===today()?'today':''} ${k===sel?'sel':''}" data-act="${sid?'sday':'day'}" data-v="${k}" aria-label="${dl(k)} ${cnt}"><span class="n">${d.getDate()}</span>${evs}</button>`;
+  }
+  return `${sid?`<div class="calhead"><button data-act="scalMove" data-v="-1" aria-label="${L('前の月','Previous month')}">‹</button><h3>${ymTitle(y,m)}</h3><button data-act="scalMove" data-v="1" aria-label="${L('次の月','Next month')}">›</button></div>`:''}
+    <div class="cal">${L(DOW,DOW_EN).map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
+    ${legend(!sid)}`;
+}
+function legend(withEvents){
+  return `<div class="legend"><span><i class="m paid"></i>${L('支払い済み','Paid')}</span><span><i class="m due"></i>${L('未払い','Unpaid')}</span><span><i class="m ticket"></i>${L('回数券','Pack')}</span><span><i class="m plan"></i>${L('レッスン予定','Scheduled lesson')}</span><span><i class="m off"></i>${L('キャンセル','Cancelled')}</span>${withEvents&&UI.filter!=='lesson'?EVT.map(([k])=>`<span><i class="m evt" style="--c:${evtColor(k)}"></i>${evtName(k)}</span>`).join(''):''}</div>`;
+}
+
+/* 時間の表（日・3日・週） */
+const HOUR=48;
+function layout(items){
+  const res=[];let cluster=[],cols=[],end=-1;
+  const flush=()=>{cluster.forEach(i=>i.n=cols.length);res.push(...cluster);cluster=[];cols=[];end=-1};
+  items.slice().sort((a,b)=>a.start-b.start||b.end-a.end).forEach(it=>{
+    if(cluster.length&&it.start>=end)flush();
+    let c=cols.findIndex(e=>e<=it.start);if(c<0){c=cols.length;cols.push(it.end)}else cols[c]=it.end;
+    it.col=c;cluster.push(it);end=Math.max(end,it.end);
+  });flush();return res;
+}
+function blk(it){
+  const top=it.start*HOUR/60, h=Math.max(20,(it.end-it.start)*HOUR/60-2);
+  return `<button class="blk ${it.cls}" style="top:${top}px;height:${h}px;left:calc(${it.col/it.n*100}% + 1px);width:calc(${100/it.n}% - 3px);${it.c?`--c:${it.c}`:''}" data-act="${it.kind==='lesson'?'openLesson':'openEvent'}" data-id="${it.o.id}">${esc(it.label)}${it.kind==='lesson'&&it.o.gid?L(' (ペア)',' (pair)'):''}<small>${timeRange(it)}</small></button>`;
+}
+function viewDays(){
+  const n={day:1,'3day':3,week:7}[UI.view];
+  let st=UI.anchor;if(UI.view==='week')st=addDays(st,-parse(st).getDay());
+  return [...Array(n)].map((_,i)=>addDays(st,i));
+}
+function timeGrid(days){
+  const t=today(), now=new Date(), nowM=now.getHours()*60+now.getMinutes();
+  const head=days.map(d=>`<button data-act="gotoDay" data-v="${d}" class="${d===t?'today':''}">${dow(d)}<b>${parse(d).getDate()}</b></button>`).join('');
+  const all=days.map(d=>`<div>${itemsOn(d).filter(i=>i.allDay).map(i=>`<button class="blk evt allday" style="--c:${i.c}" data-act="openEvent" data-id="${i.o.id}">${esc(i.label)}</button>`).join('')}</div>`).join('');
+  const cols=days.map(d=>`<div class="tg-col ${d===t?'today':''}" data-act="slot" data-v="${d}">${layout(itemsOn(d).filter(i=>!i.allDay)).map(blk).join('')}${d===t?`<div class="now" style="top:${nowM*HOUR/60}px"></div>`:''}</div>`).join('');
+  const times=[...Array(23)].map((_,i)=>`<span style="top:${(i+1)*HOUR}px">${i+1}:00</span>`).join('');
+  return `<div class="tg" style="--n:${days.length};--h:${HOUR}px"><div class="tg-head"><div></div>${head}</div><div class="tg-all"><div class="lab">${L('終日','All day')}</div>${all}</div><div class="tg-body" id="tgb"><div class="tg-grid"><div class="tg-times">${times}</div>${cols}</div></div></div>
+  <p class="hint" style="margin:8px 0 0">${L('空いている時間をタップすると、その時刻で予定を追加できます。','Tap an empty time slot to add an event at that time.')}</p>`;
+}
+function rangeTitle(ds){
+  const a=parse(ds[0]),b=parse(ds[ds.length-1]);
+  if(LANGV==='en'){const f=(d,o)=>d.toLocaleDateString('en-US',o);
+    if(ds.length===1)return f(a,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+    return `${f(a,{month:'short',day:'numeric'})} – ${f(b,a.getMonth()===b.getMonth()?{day:'numeric'}:{month:'short',day:'numeric'})}, ${b.getFullYear()}`}
+  return `${a.getFullYear()}年${a.getMonth()+1}月`+(ds.length>1?` ${a.getDate()}日–${a.getMonth()!==b.getMonth()?(b.getMonth()+1)+'月':''}${b.getDate()}日`:` ${a.getDate()}日(${dow(ds[0])})`);
+}
+function cal(){
+  const V=[['day',L('日','Day')],['3day',L('3日','3 days')],['week',L('週','Week')],['month',L('月','Month')]];
+  let title;
+  if(UI.view==='month'){const [y,m]=UI.cal.split('-').map(Number);title=ymTitle(y,m)}else title=rangeTitle(viewDays());
+  const bar=`<div class="vbar"><button class="navb" data-act="goToday">${L('今日','Today')}</button><button class="navb" data-act="calNav" data-v="-1" aria-label="${L('前へ','Previous')}">‹</button><button class="navb" data-act="calNav" data-v="1" aria-label="${L('次へ','Next')}">›</button><h3 class="grow">${title}</h3>
+    <div class="vseg">${V.map(([k,n])=>`<button data-act="view" data-v="${k}" aria-pressed="${UI.view===k}">${n}</button>`).join('')}</div></div>
+    <div class="vbar">${segHtml('filter',UI.filter)}</div>`;
+  if(UI.view!=='month')return `<section class="card">${bar}${timeGrid(viewDays())}${legend(true)}</section>`;
+  const dlist=itemsOn(UI.day);
+  return `<div class="grid2" style="grid-template-columns:${innerWidth>=900?'1.6fr 1fr':'1fr'}">
+  <section class="card">${bar}${calendar(UI.cal,UI.day)}</section>
+  <section class="card"><h2>${dl(UI.day)}</h2>${dlist.length?dlist.map(it=>itemRow(it,false)).join(''):`<div class="empty">${L('この日の予定はありません。','Nothing on this day.')}</div>`}
+    <div style="margin-top:10px"><button class="btn ghost sm" data-act="newEvent" data-date="${UI.day}">${L('＋ この日に予定を追加','＋ Add event on this day')}</button></div></section>
+  </div>`;
+}
+
+/* 生徒 */
+function rateLabel(s){return s.custom30!=null?L(`30分 ${money(s.custom30)}（個別）`,`${money(s.custom30)} / 30 min (custom)`):L(`30分 ${money(S.settings.solo30)}`,`${money(S.settings.solo30)} / 30 min`)}
+function stuList(){
+  const rows=S.students.map(s=>{
+    const n=done().filter(l=>l.sid===s.id);
+    const nx=sortL(S.lessons.filter(l=>l.sid===s.id&&l.status==='planned'&&l.date>=today()))[0];
+    const due=unpaidLessons().filter(l=>l.sid===s.id).reduce((a,l)=>a+ +l.pay.amount,0);
+    const rem=S.packages.filter(p=>p.sid===s.id).reduce((a,p)=>a+Math.max(0,left(p)),0);
+    const hasPkg=S.packages.some(p=>p.sid===s.id);
+    const open=(s.todos||[]).filter(t=>!t.done).length, pc=pendingOf(s.id).length;
+    return `<button class="row" data-act="openStu" data-id="${s.id}"><div class="avatar" style="background:${s.color}">${esc(s.name[0])}</div>
+      <div class="what"><div class="nm">${esc(s.name)}</div><div class="sub">${rateLabel(s)} ・ ${N(n.length,'回','lesson')} ・ ${L('次','Next')} ${nx?dl(nx.date):L('未定','TBD')}</div>
+      <div class="meta">${due?`<span class="pill due">${L('未払い','Unpaid')} ${money(due)}</span>`:''}${hasPkg?`<span class="pill ${rem<=2?'warn':'ticket'}">${L(`回数券 残り${rem}`,`Pack: ${rem} left`)}</span>`:''}${pc?`<span class="pill warn">${L(`振替待ち ${pc}`,`Make-up TBD: ${pc}`)}</span>`:''}${open?`<span class="pill off">${L(`次やること ${open}`,`To-do: ${open}`)}</span>`:''}</div></div></button>`}).join('');
+  return `<section class="card"><h2>${L('生徒','Students')} <button class="btn sm" data-act="newStu">${L('＋ 生徒を追加','＋ Add student')}</button></h2>${rows||`<div class="empty">${L('まだ生徒がいません。「＋ 生徒を追加」から始めましょう。','No students yet. Start with “＋ Add student”.')}</div>`}</section>`;
+}
+function stuDetail(){
+  const s=stu(UI.sid);
+  const ls=sortL(S.lessons.filter(l=>l.sid===s.id)).reverse();
+  const past=ls.filter(l=>l.status!=='planned');
+  const future=sortL(S.lessons.filter(l=>l.sid===s.id&&l.status==='planned'));
+  const dn=ls.filter(l=>l.status==='done');
+  const due=unpaidLessons().filter(l=>l.sid===s.id).reduce((a,l)=>a+ +l.pay.amount,0);
+  const paidSum=income().filter(r=>r.sid===s.id).reduce((a,r)=>a+r.amount,0);
+  const pk=S.packages.filter(p=>p.sid===s.id).sort((a,b)=>b.date.localeCompare(a.date));
+  const wc={};dn.forEach(l=>l.waza.forEach(w=>wc[w]=(wc[w]||0)+1));
+  const top=Object.entries(wc).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const todos=s.todos||[], open=todos.filter(t=>!t.done), closed=todos.filter(t=>t.done);
+  const last=lastDone(s.id), pend=pendingOf(s.id);
+  const sday=UI.sday?sortL(S.lessons.filter(l=>l.sid===s.id&&l.date===UI.sday)):[];
+  return `<button class="back" data-act="backStu">‹ ${L('生徒一覧','All students')}</button>
+  <section class="card" style="margin-bottom:14px"><div class="stu"><div class="avatar" style="background:${s.color};width:52px;height:52px;font-size:20px">${esc(s.name[0])}</div>
+    <div class="what"><h3>${esc(s.name)}</h3><div class="sub">${rateLabel(s)} ・ ${L(`いつも${s.dur}分`,`usually ${s.dur} min`)}（${money(priceFor(s.id,s.dur,1))}）</div></div><button class="btn ghost sm" data-act="editStu" data-id="${s.id}">${L('編集','Edit')}</button></div>
+    ${s.memo?`<div class="lognote" style="margin-top:10px">${esc(s.memo)}</div>`:''}</section>
+  <div class="kpis"><div class="kpi"><span>${L('レッスン','Lessons')}</span><b>${dn.length}</b></div><div class="kpi"><span>${L('受け取り合計','Total received')}</span><b>${money(paidSum)}</b></div><div class="kpi due"><span>${L('未払い','Unpaid')}</span><b>${money(due)}</b></div></div>
+  <div class="grid2">
+    <div style="display:grid;gap:14px">
+      <section class="card"><h2>${L('次やること・やりたいこと','To-do & wishes')}</h2>
+        ${last?.next?`<div class="prev"><b>${L(`前回 ${md(last.date)} に書いた「次回やること」`,`“Next time” from ${md(last.date)}`)}</b>${esc(last.next)}</div>`:''}
+        <div>${open.map(t=>`<div class="todo"><input type="checkbox" id="td-${t.id}" data-act="todoToggle" data-id="${t.id}" aria-label="${L('やった','Done')}"><label class="tx" for="td-${t.id}">${esc(t.text)}</label><button class="del" data-act="todoDel" data-id="${t.id}" aria-label="${L('消す','Delete')}">✕</button></div>`).join('')||`<div class="empty">${L('まだありません。次のレッスンでやること、本人がやりたいと言っていたことなどを書いておけます。','Nothing yet. Note what to cover next, or what the student said they want to learn.')}</div>`}</div>
+        <div class="addrow"><input id="todo-new" maxlength="300" placeholder="${L('例：背負投の入り方（本人の希望）','e.g. Seoi-nage entry (student request)')}"><button class="btn sm" data-act="todoAdd">${L('追加','Add')}</button></div>
+        ${closed.length?`<button class="back" style="margin:10px 0 0;font-size:13px" data-act="toggleDone">${UI.showDone?'▾':'▸'} ${L(`やったこと ${closed.length}件`,`Done (${closed.length})`)}</button>${UI.showDone?closed.slice().reverse().map(t=>`<div class="todo done"><input type="checkbox" checked data-act="todoToggle" data-id="${t.id}" aria-label="${L('まだにもどす','Mark as not done')}"><span class="tx">${esc(t.text)}${t.doneOn?` <span class="hint">${md(t.doneOn)}</span>`:''}</span></div>`).join(''):''}`:''}
+      </section>
+      <section class="card"><h2>${L('これからの予定','Upcoming')} <button class="btn sm ghost" data-act="newEvent" data-sid="${s.id}">${L('＋ 予定を入れる','＋ Schedule')}</button></h2>
+        ${pend.map(l=>`<div class="row"><div class="when"><b>${md(l.date)}</b><span>${L('キャンセル','Cancelled')}</span></div><div class="what"><div class="nm">${L('振替の日にちが未定','Make-up not scheduled')}</div><div class="sub">${esc(l.plan||tReason(l.cancel.reason))}</div></div><button class="btn sm" data-act="schedCarry" data-id="${l.id}">${L('日にちを決める','Schedule')}</button></div>`).join('')}
+        ${future.length?future.map(l=>`<div class="row" style="align-items:flex-start"><div class="when"><b>${md(l.date)}</b><span>${dow(l.date)} ${l.time}</span></div>
+          <button class="what" data-act="openLesson" data-id="${l.id}" style="border:0;background:none;text-align:left;padding:0"><div class="nm">${l.gid?esc(names(group(l)))+`<span class="type">${L('ペア','Pair')}</span>`:`${l.dur}${L('分',' min')}`}${l.from?`<span class="type">${L('振替','Make-up')}</span>`:''}</div><div class="planbox ${l.plan?'':'hint'}">${l.plan?esc(l.plan):L('やる予定の内容を書く','Write a lesson plan')}</div></button>
+          <button class="btn sm danger" data-act="cancelOpen" data-id="${l.id}">${L('キャンセル','Cancel')}</button></div>`).join(''):(pend.length?'':`<div class="empty">${L('予定はありません。','Nothing scheduled.')}</div>`)}
+      </section>
+      <section class="card">${calendar(UI.scal,UI.sday,s.id)}${UI.sday?`<div style="margin-top:10px"><h2>${dl(UI.sday)}</h2>${sday.length?sday.map(l=>lessonRow(l,false,s.id)).join(''):`<div class="empty">${L('この日のレッスンはありません。','No lesson on this day.')}</div>`}</div>`:''}</section>
+    </div>
+    <div style="display:grid;gap:14px">
+      <section class="card"><h2>${L('回数券','Lesson packs')} <button class="btn sm" data-act="newPkg" data-sid="${s.id}">${L('＋ 回数券を追加','＋ Add pack')}</button></h2>
+        ${pk.length?pk.map(p=>{const u=used(p.id),r=p.count-u;return `<div class="pkg"><div class="what"><div class="nm">${L(`${p.count}回分`,`${p.count} lessons`)} <span class="num" style="font-weight:400;color:var(--muted)">${money(p.price)}</span></div><div class="sub">${L(`${md(p.date)} 購入`,`Bought ${md(p.date)}`)}・${p.paid?L(`${esc(tMethod(p.method))}で受け取り済み`,`paid by ${esc(tMethod(p.method))}`):`<span style="color:var(--due)">${L('未払い','Unpaid')}</span>`}</div><div class="bar"><i style="width:${Math.min(100,u/p.count*100)}%"></i></div></div><span class="pill ${r<=0?'off':r<=2?'warn':'ticket'}">${r<=0?L('使い切り','Used up'):L(`残り ${r}回`,`${r} left`)}</span></div>`}).join(''):`<div class="empty">${L('回数券はありません。毎回お支払いの生徒はこのままで大丈夫です。','No packs. Students who pay each time don’t need one.')}</div>`}
+      </section>
+      <section class="card"><h2>${L('よく練習している技','Most practiced')}</h2>${top.length?`<div class="chips">${top.map(([w,c])=>`<span class="tag">${esc(tWaza(w))} <span class="num">${c}</span></span>`).join('')}</div>`:`<div class="empty">${L('記録が増えるとここに出ます。','Shows up as you log lessons.')}</div>`}</section>
+      <section class="card"><h2>${L('これまでのレッスン','Lesson history')} <button class="btn sm ghost" data-act="newLesson" data-sid="${s.id}">${L('＋ 記録','＋ Log')}</button></h2>
+        ${past.length?past.map(l=>`<button class="row" data-act="openLesson" data-id="${l.id}" style="align-items:flex-start"><div class="when"><b>${md(l.date)}</b><span>${dow(l.date)}</span></div><div class="what">
+          ${l.status==='cancelled'?`<div class="sub">${L(`${esc(tReason(l.cancel?.reason||''))}でキャンセル`,`Cancelled: ${esc(tReason(l.cancel?.reason||''))}`)}${l.plan?` (${L('予定','plan')}: ${esc(l.plan)})`:''}</div>`:''}
+          ${l.gid?`<div class="sub">${L('ペア','Pair')}: ${esc(names(group(l).filter(x=>x.sid!==s.id)))}</div>`:''}
+          ${l.waza.length?`<div class="chips" style="gap:4px">${l.waza.map(w=>`<span class="tag">${esc(tWaza(w))}</span>`).join('')}</div>`:''}
+          ${l.content?`<div class="lognote">${esc(l.content)}</div>`:''}
+          ${l.next?`<div class="sub" style="white-space:normal">→ ${L('次回','Next')}: ${esc(l.next)}</div>`:''}</div>${payPill(l)}</button>`).join(''):`<div class="empty">${L('まだ記録がありません。','No lessons logged yet.')}</div>`}
+      </section>
+    </div>
+  </div>`;
+}
+
+/* 売上 */
+function moneyView(){
+  const rows=income();
+  const [y,m]=UI.month.split('-').map(Number);
+  const months=[];for(let i=5;i>=0;i--){const d=new Date(y,m-1-i,1);months.push(`${d.getFullYear()}-${pad(d.getMonth()+1)}`)}
+  const sums=months.map(k=>rows.filter(r=>r.date.startsWith(k)).reduce((a,r)=>a+r.amount,0));
+  const max=Math.max(...sums,1);
+  const mr=rows.filter(r=>r.date.startsWith(UI.month));
+  const total=mr.reduce((a,r)=>a+r.amount,0);
+  const cnt=dedupe(done().filter(l=>l.date.startsWith(UI.month))).length;
+  const canc=dedupe(S.lessons.filter(l=>l.status==='cancelled'&&l.date.startsWith(UI.month))).length;
+  const by={};mr.forEach(r=>{by[r.sid]=(by[r.sid]||0)+r.amount});
+  const meth={};mr.forEach(r=>{const k=r.method?tMethod(r.method):'—';meth[k]=(meth[k]||0)+r.amount});
+  return `<section class="card" style="margin-bottom:14px">
+    <div class="calhead"><button data-act="monMove" data-v="-1" aria-label="${L('前の月','Previous month')}">‹</button><h3>${L(`${y}年${m}月の受け取り`,`Received · ${ymTitle(y,m)}`)}</h3><button data-act="monMove" data-v="1" aria-label="${L('次の月','Next month')}">›</button></div>
+    <div class="kpis" style="margin:10px 0 4px"><div class="kpi"><span>${L('受け取り','Received')}</span><b>${money(total)}</b></div><div class="kpi"><span>${L('レッスン','Lessons')}</span><b>${cnt}</b></div><div class="kpi"><span>${L('キャンセル','Cancelled')}</span><b>${canc}</b></div></div>
+    <div class="bars" role="img" aria-label="${L('直近6か月の受け取り','Received over the last 6 months')}">${months.map((k,i)=>`<div class="${k===UI.month?'cur':''}"><em>${sums[i]?money(sums[i]):''}</em><i style="height:${sums[i]/max*100}%"></i></div>`).join('')}</div>
+    <div class="blabels">${months.map(k=>`<span>${mShort(+k.slice(5))}</span>`).join('')}</div>
+    <p class="hint" style="margin:10px 0 0">${L('代金を受け取った日の月に数えます（回数券はまとめて、その月に）。','Counted in the month the money was received (packs count in full that month).')}</p>
+  </section>
+  <div class="grid2">
+    <section class="card"><h2>${L('生徒ごと','By student')}</h2>${Object.keys(by).length?`<table><tr><th>${L('生徒','Student')}</th><th class="r">${L('金額','Amount')}</th></tr>${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([sid,v])=>`<tr><td>${esc(stu(sid).name)}</td><td class="r">${money(v)}</td></tr>`).join('')}</table>`:`<div class="empty">${L('この月の受け取りはありません。','Nothing received this month.')}</div>`}
+      <h2 style="margin-top:16px">${L('受け取り方法','Payment method')}</h2><div class="chips">${Object.entries(meth).map(([k,v])=>`<span class="tag">${esc(k)} <span class="num">${money(v)}</span></span>`).join('')||'<span class="empty">—</span>'}</div></section>
+    <section class="card"><h2>${L('明細','Details')} <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm ghost" data-act="csv" data-v="month">${L('この月のCSV','CSV: this month')}</button><button class="btn sm ghost" data-act="csv" data-v="year">${L(`${y}年のCSV`,`CSV: ${y}`)}</button></span></h2>
+      <div class="tablewrap"><table><tr><th>${L('受取日','Date')}</th><th>${L('生徒','Student')}</th><th>${L('内容','Item')}</th><th class="r">${L('金額','Amount')}</th></tr>${mr.map(r=>`<tr><td class="num">${md(r.date)}</td><td>${esc(stu(r.sid).name)}</td><td>${esc(r.kind)}${r.lessonDate&&r.lessonDate!==r.date?`<span class="hint">（${L(`${md(r.lessonDate)}分`,`for ${md(r.lessonDate)}`)}）</span>`:''}</td><td class="r">${money(r.amount)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">—</td></tr>'}</table></div>
+      <p class="hint">${L('確定申告（Schedule C）用に、1年分をCSVで書き出せます。','Export a full year as CSV for your tax return (Schedule C).')}</p></section>
+  </div>`;
+}
+
+/* ---------- 入力シート ---------- */
+const F={};
+function openSheet(title,body){
+  g('layer').innerHTML=`<div class="overlay" data-act="closeBg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sh"><b>${esc(title)}</b><button class="x" data-act="close" aria-label="${L('閉じる','Close')}">✕</button></div>${body}</div></div>`;
+  document.body.style.overflow='hidden';
+}
+function closeSheet(){g('layer').innerHTML='';document.body.style.overflow=''}
+function g(id){return document.getElementById(id)}
+const methodChips=(act,cur,sid)=>`<div class="chips">${METHODS.map(m=>`<button class="chip" data-act="${act}" ${sid?`data-sid="${sid}"`:''} data-v="${m}" aria-pressed="${cur===m}">${tMethod(m)}</button>`).join('')}</div>`;
+
+function defaultPay(sid,n,dur){const a=activePkg(sid);return a.length&&n<2?{mode:'ticket',pid:a[0].id}:{mode:'per',amount:priceFor(sid,dur,n),paid:false}}
+function payState(p,sid,n,dur){
+  if(!p)p=defaultPay(sid,n,dur);
+  return {mode:p.mode==='ticket'?'ticket':p.paid?'paid':'due',method:p.method||'現金',pid:p.pid||'',amount:p.amount??priceFor(sid,dur,n),paidOn:p.paidOn||''};
+}
+
+/* レッスンの記録・予定（マンツーマン／ペア） */
+function lessonForm(l,preset={}){
+  if(!S.students.length){toast(L('先に生徒を追加してください','Add a student first'));UI.tab='stu';UI.sid=null;render();return}
+  const isNew=!l;
+  const grp=l?group(l):[];
+  const sids=l?grp.map(x=>x.sid):[preset.sid||(UI.tab==='stu'&&UI.sid)||S.students[0].id];
+  const base=l||{date:preset.date||today(),time:'16:00',dur:stu(sids[0]).dur,waza:[],content:'',next:'',plan:'',status:'done'};
+  F.tdur=base.dur;
+  Object.assign(F,{ids:Object.fromEntries(grp.map(x=>[x.sid,x.id])),sids,waza:[...base.waza],status:base.status,isNew,confirmDel:false,pay:{},carry:{},todo:new Set(),gid:l?.gid||null});
+  sids.forEach(sid=>{F.pay[sid]=payState(grp.find(x=>x.sid===sid)?.pay,sid,sids.length,base.dur)});
+  if(isNew)sids.forEach(sid=>{const pc=pendingOf(sid)[0];if(pc)F.carry[sid]=pc.id});
+  const title=isNew?L('レッスンを記録','Log a lesson'):base.status==='planned'?L('予定のレッスン','Scheduled lesson'):base.status==='cancelled'?L('キャンセルしたレッスン','Cancelled lesson'):L('レッスンの記録','Lesson log');
+  const canc=base.status==='cancelled';
+  const to=canc&&l.cancel?.to?byId(l.cancel.to):null;
+  openSheet(title,`
+    ${canc?`<div class="prev"><b>${L(`キャンセル（${esc(tReason(l.cancel?.reason||''))}）`,`Cancelled (${esc(tReason(l.cancel?.reason||''))})`)}</b>${l.cancel?.carry==='moved'&&to?L(`振替：${dl(to.date)} に繰り越し済み`,`Moved to the make-up on ${dl(to.date)}`):l.cancel?.carry==='pending'?L('振替の日にちはまだ決まっていません。','Make-up not scheduled yet.'):L('繰り越しなし','Not carried over')}</div>
+      <div style="display:grid;gap:10px">${l.cancel?.carry==='pending'?`<button class="btn block" data-act="schedCarry" data-id="${l.id}">${L('振替の日にちを決める','Schedule the make-up')}</button>`:''}<button class="btn block ghost" data-act="uncancel" data-id="${l.id}">${L('キャンセルを取り消す（予定に戻す）','Undo cancel (back to scheduled)')}</button><button class="btn block danger" data-act="delLesson" id="f-del">${L('この記録を消す','Delete this record')}</button></div>`:`
+    ${base.status==='planned'&&!isNew?`<div class="prev"><b>${L('予定','Scheduled')}${l.from?L('（振替）',' (make-up)'):''}</b>${L('終わったら内容を書いて「記録する」。来られなくなったら下の「キャンセルにする」。','After the lesson, add notes and tap “Log lesson”. If it’s off, use “Cancel lesson” below.')}</div>`:''}
+    <div class="fld"><span class="lb">${L('生徒','Student')} <span class="hint" style="font-weight:400">— ${L('2人選ぶとペアになります','pick two for a pair lesson')}</span></span><div class="chips" id="f-stu">${S.students.map(x=>`<button class="chip" data-act="fStu" data-id="${x.id}" aria-pressed="${sids.includes(x.id)}">${esc(x.name)}</button>`).join('')}</div><div class="hint" id="f-type"></div></div>
+    <div id="f-prev"></div>
+    <div class="two"><div class="fld"><label for="f-date">${L('日付','Date')}</label><input type="date" id="f-date" value="${base.date}"></div>
+    <div class="fld"><span class="lb">${L('開始','Start')}</span>${timeSel('f-st',base.time)}</div>
+    <div class="fld"><span class="lb">${L('終了','End')}</span>${timeSel('f-en',fromMin(toMin(base.time)+base.dur))}</div></div>
+    <div class="fld"><label for="f-place">${L('場所','Location')}</label><input id="f-place" maxlength="120" value="${esc(base.place||'')}" placeholder="${L('例：WJA道場','e.g. WJA Dojo')}"></div>
+    ${l&&l.seriesId&&base.status==='planned'&&laterInSeries(l).length?scopeHtml('lesson'):''}
+    <div class="fld"><label for="f-plan">${L('この日にやる予定','Plan for this lesson')}</label><textarea id="f-plan" maxlength="2000" style="min-height:60px" placeholder="${L('予定を入れるときに書いておくと、当日ここに出ます','Write it when scheduling and it shows up here on the day')}">${esc(base.plan)}</textarea></div>
+    <div id="f-todos"></div>
+    <div class="fld"><span class="lb">${L('練習した技・内容','Techniques practiced')}</span>${Object.entries(WAZA).map(([gn,ws])=>`<div class="hint" style="margin-top:2px">${L(gn,WAZA_GROUP_EN[gn])}</div><div class="chips">${ws.map(w=>`<button class="chip" data-act="fWaza" data-v="${w}" aria-pressed="${F.waza.includes(w)}">${tWaza(w)}</button>`).join('')}</div>`).join('')}
+      ${F.waza.filter(w=>!Object.values(WAZA).flat().includes(w)).length?`<div class="chips" style="margin-top:6px">${F.waza.filter(w=>!Object.values(WAZA).flat().includes(w)).map(w=>`<button class="chip" data-act="fWaza" data-v="${esc(w)}" aria-pressed="true">${esc(w)}</button>`).join('')}</div>`:''}
+      <input id="f-waza-add" placeholder="${L('ほかの技を追加して Enter','Type another technique and press Enter')}" style="margin-top:6px"></div>
+    <div class="fld"><label for="f-content">${L('この日にやったこと・気づいたこと','What you did & noticed')}</label><textarea id="f-content" maxlength="4000" placeholder="${L('例：大外刈の刈り足が浮く。つま先を伸ばす意識で改善。','e.g. Reaping leg floats on osoto-gari; better when pointing the toes.')}">${esc(base.content)}</textarea></div>
+    <div class="fld"><label for="f-next">${L('次回やること','Next time')}</label><input id="f-next" maxlength="500" value="${esc(base.next)}" placeholder="${L('次のレッスンの最初に表示されます','Shown at the start of the next lesson')}"></div>
+    <div class="fld"><span class="lb">${L('お支払い','Payment')}</span><div id="f-pay" style="display:grid;gap:10px"></div></div>
+    ${isNew||base.status==='planned'?`<div class="fld"><label class="check"><input type="checkbox" id="f-book"> ${L('次回の予約を入れる','Book the next lesson')}</label>
+      <div class="two" id="f-bookbox" hidden><div class="fld"><label for="f-bdate">${L('次回の日付','Next date')}</label><input type="date" id="f-bdate" value="${addDays(base.date,7)}"></div><div class="fld"><span class="lb">${L('時間','Time')}</span>${timeSel('f-bt',base.time)}</div></div><div class="hint" id="f-bookhint" hidden>${L('「次回やること」が、その日の予定に入ります。','“Next time” becomes that lesson’s plan.')}</div></div>`:''}
+    <div style="display:grid;gap:10px;margin-top:6px">
+      <button class="btn block" data-act="saveLesson" data-as="done">${base.status==='planned'||isNew?L('記録する（レッスンをした）','Log lesson (it happened)'):L('保存する','Save')}</button>
+      ${isNew?`<button class="btn block ghost" data-act="saveLesson" data-as="planned">${L('予定として入れる（まだやっていない）','Save as scheduled (not yet held)')}</button>`:''}
+      ${base.status==='planned'&&!isNew?`<button class="btn block ghost" data-act="saveLesson" data-as="planned">${L('予定のまま保存する','Save, keep as scheduled')}</button><button class="btn block danger" data-act="cancelOpen" data-id="${l.id}">${L('キャンセルにする','Cancel lesson')}</button>`:''}
+      ${!isNew?`<button class="btn block ghost" data-act="delLesson" id="f-del" style="color:var(--due)">${L('このレッスンを消す','Delete this lesson')}</button>`:''}
+    </div>`}`);
+  if(!canc)refreshForm();
+}
+function refreshForm(){
+  const n=F.sids.length;
+  g('f-type').textContent=n>=2?L(`ペアレッスン：1時間 ${money(S.settings.pair60)}（2人の合計）を半分ずつ`,`Pair lesson: ${money(S.settings.pair60)}/hour for both, split in half`):L(`マンツーマン：${rateLabel(stu(F.sids[0]))}`,`Private: ${rateLabel(stu(F.sids[0]))}`);
+  g('f-prev').innerHTML=F.sids.map(sid=>{const last=sortL(S.lessons.filter(l=>l.sid===sid&&l.status==='done'&&!Object.values(F.ids).includes(l.id))).pop();
+    return last&&last.next?`<div class="prev"><b>${esc(stu(sid).name)}・${L(`前回 ${md(last.date)} の「次回やること」`,`“Next time” from ${md(last.date)}`)}</b>${esc(last.next)}</div>`:''}).join('');
+  const td=F.sids.flatMap(sid=>(stu(sid).todos||[]).filter(t=>!t.done).map(t=>({...t,sid})));
+  g('f-todos').innerHTML=td.length?`<div class="fld"><span class="lb">${L('次やること・やりたいこと','To-do & wishes')} <span class="hint" style="font-weight:400">— ${L('今日やったものをタップ','tap what you covered today')}</span></span><div class="chips">${td.map(t=>`<button class="chip" data-act="fTodo" data-id="${t.id}" aria-pressed="${F.todo.has(t.id)}">${n>1?esc(shortName(stu(t.sid).name))+': ':''}${esc(t.text)}</button>`).join('')}</div></div>`:'';
+  renderPay();
+}
+function renderPay(){
+  const n=F.sids.length;
+  g('f-pay').innerHTML=F.sids.map(sid=>{
+    const P=F.pay[sid], s=stu(sid);
+    const c=F.carry[sid]?byId(F.carry[sid]):null;
+    const cPaid=c&&c.pay.mode==='per'&&c.pay.paid, cTicket=c&&c.pay.mode==='ticket';
+    const cl=d=>L(`${md(d)} にキャンセルした分の振替として入れる`,`Count as the make-up for ${md(d)}`);
+    const carryHtml=c?`<label class="check"><input type="checkbox" data-act="fCarry" data-sid="${sid}" checked> ${cl(c.date)}</label>`:(pendingOf(sid).length&&F.isNew?`<label class="check"><input type="checkbox" data-act="fCarry" data-sid="${sid}"> ${cl(pendingOf(sid)[0].date)}</label>`:'');
+    if(c&&(cPaid||cTicket))return `<div class="paybox">${n>1?`<b>${esc(s.name)}</b>`:''}${carryHtml}<div class="hint">${cPaid?L(`代金は ${md(c.date)} の分でいただき済み（${money(c.pay.amount)}・${esc(tMethod(c.pay.method))}）なので、この回は支払い済みになります。`,`Already paid for ${md(c.date)} (${money(c.pay.amount)}, ${esc(tMethod(c.pay.method))}), so this lesson counts as paid.`):L('回数券はキャンセルの日には減っていません。この回で1回分を使います。','The pack wasn’t used on the cancelled day. This lesson uses one.')}</div></div>`;
+    const pk=S.packages.filter(p=>p.sid===sid&&(left(p)>0||p.id===P.pid));
+    if(P.mode==='ticket'&&!pk.some(p=>p.id===P.pid))P.pid=pk[0]?.id||'';
+    return `<div class="paybox">${n>1?`<b>${esc(s.name)}</b>`:''}${carryHtml}
+      <div class="seg">${[['paid',L('支払い済み','Paid')],['due',L('未払い','Unpaid')],['ticket',L('回数券','Pack')]].map(([k,nm])=>`<button data-act="fMode" data-sid="${sid}" data-v="${k}" aria-pressed="${P.mode===k}">${nm}</button>`).join('')}</div>
+      ${P.mode==='ticket'?(pk.length?`<div class="chips">${pk.map(p=>`<button class="chip" data-act="fPkg" data-sid="${sid}" data-id="${p.id}" aria-pressed="${p.id===P.pid}">${L(`${p.count}回券（${md(p.date)}）残り${left(p)}回`,`${p.count}-pack (${md(p.date)}) · ${left(p)} left`)}</button>`).join('')}</div><div class="hint">${L('レッスンをした日に1回分減ります。予定やキャンセルでは減りません。','One is used on the day the lesson happens. Scheduling or cancelling doesn’t use one.')}</div>`
+        :`<div class="hint">${L('使える回数券がありません。生徒の画面の「＋ 回数券を追加」から登録できます。','No pack available. Add one from the student page (“＋ Add pack”).')}</div>`)
+      :`<div class="two"><div class="fld" style="margin:0"><label for="f-amt-${sid}">${L('金額（$）','Amount ($)')}</label><input type="number" class="f-amount" id="f-amt-${sid}" data-sid="${sid}" inputmode="decimal" min="0" value="${esc(P.amount)}"></div></div>
+        ${P.mode==='paid'?methodChips('fMethod',P.method,sid):`<div class="hint">${L('ホームの「まだいただいていない代金」に出ます（予定のうちは出ません）。','Shows under “Payments due” on Home (not while still scheduled).')}</div>`}`}</div>`}).join('');
+}
+function recalcAmounts(){const d=durOf('f')||60;F.sids.forEach(sid=>{F.pay[sid].amount=priceFor(sid,d,F.sids.length)});}
+
+function saveLesson(as){
+  if(!F.sids.length){toast(L('生徒を選んでください','Pick a student'));return}
+  const status=as==='planned'?'planned':'done';
+  for(const sid of F.sids){const P=F.pay[sid];if(!F.carry[sid]&&P.mode==='ticket'&&!P.pid){toast(L(`${stu(sid).name}：回数券を選んでください`,`${stu(sid).name}: pick a pack`),L('または「支払い済み／未払い」に切り替えてください','or switch to Paid / Unpaid'));return}}
+  const date=g('f-date').value||today(), time=readT('f-st'), dur=durOf('f');
+  if(dur<=0){toast(L('終了の時刻を開始より後にしてください','End time must be after the start'));return}
+  const scope=document.querySelector('input[name="scope"]:checked')?.value;
+  const gid=F.sids.length>1?(F.gid||uid()):null;
+  Object.entries(F.ids).forEach(([sid,id])=>{if(!F.sids.includes(sid))S.lessons=S.lessons.filter(l=>l.id!==id)});
+  const shared={date,time,dur,status,gid,place:g('f-place').value.trim(),waza:[...F.waza],content:g('f-content').value.trim(),next:g('f-next').value.trim(),plan:g('f-plan').value.trim()};
+  const saved=[];
+  F.sids.forEach(sid=>{
+    const id=F.ids[sid]||uid(), old=byId(id);
+    const P=F.pay[sid];
+    const pay=P.mode==='ticket'?{mode:'ticket',pid:P.pid}:{mode:'per',amount:+P.amount||0,paid:P.mode==='paid',method:P.mode==='paid'?P.method:'',paidOn:P.mode==='paid'?(P.paidOn||today()):''};
+    const rec={...(old||{}),id,sid,...shared,pay,cancel:null,from:old?.from||null};
+    const c=F.carry[sid]?byId(F.carry[sid]):null;
+    if(c)applyCarry(c,rec);
+    if(old)Object.assign(old,rec);else S.lessons.push(rec);
+    saved.push(rec);
+    if(status==='done')(stu(sid).todos||[]).forEach(t=>{if(F.todo.has(t.id)){t.done=true;t.doneOn=date}});
+  });
+  if(scope==='after'){const first=byId(Object.values(F.ids)[0]);laterInSeries(first).forEach(x=>{if(x.status==='planned'){x.time=time;x.dur=dur;x.place=shared.place;if(x.pay.mode==='per'&&!x.pay.paid)x.pay.amount=priceFor(x.sid,dur,group(x).length)}})}
+  let booked='';
+  if(g('f-book')?.checked&&g('f-bdate').value){
+    const bd=g('f-bdate').value, bg=F.sids.length>1?uid():null;
+    F.sids.forEach(sid=>S.lessons.push({id:uid(),sid,gid:bg,date:bd,time:readT('f-bt'),place:shared.place,dur,status:'planned',waza:[],content:'',next:'',plan:shared.next,pay:defaultPay(sid,F.sids.length,dur),cancel:null,from:null}));
+    booked=L(`次回 ${dl(bd)} を予約しました`,`Next lesson booked: ${dl(bd)}`);
+  }
+  const r=saved[0];
+  const sub=booked||(r.from?L('キャンセル分の振替として入れました','Saved as the make-up lesson'):r.pay.mode==='ticket'&&status==='done'?L(`回数券の残り ${left(S.packages.find(p=>p.id===r.pay.pid))}回`,`${left(S.packages.find(p=>p.id===r.pay.pid))} left in the pack`):'');
+  run(()=>{save();closeSheet();render()},status==='planned'?L('予定を入れました','Scheduled'):L('記録しました。おつかれさまでした！','Logged. Nice work today!'),sub);
+}
+
+/* 時刻（5分おき）・繰り返し */
+function timeSel(id,val){
+  const [h,m]=String(val||'16:00').split(':').map(Number), mm=Math.min(55,Math.round((m||0)/5)*5);
+  return `<span class="tsel"><select id="${id}-h" aria-label="${L('時','Hour')}">${[...Array(24)].map((_,i)=>`<option value="${i}" ${i===h?'selected':''}>${i}</option>`).join('')}</select><b>:</b><select id="${id}-m" aria-label="${L('分','Minute')}">${[...Array(12)].map((_,i)=>`<option value="${i*5}" ${i*5===mm?'selected':''}>${pad(i*5)}</option>`).join('')}</select></span>`;
+}
+const readT=id=>`${pad(g(id+'-h').value)}:${pad(g(id+'-m').value)}`;
+function setT(id,t){const [h,m]=t.split(':').map(Number);g(id+'-h').value=h;g(id+'-m').value=Math.min(55,Math.round(m/5)*5)}
+const durOf=P=>toMin(readT(P+'-en'))-toMin(readT(P+'-st'));
+function repeatDates(start,rule,mode,count,until){
+  if(rule==='none')return [start];
+  const out=[], d0=parse(start), day=d0.getDate(), lim=addDays(start,730);
+  for(let k=0;k<400&&out.length<150;k++){
+    let d;
+    if(rule==='monthly'){d=new Date(d0.getFullYear(),d0.getMonth()+k,day);if(d.getDate()!==day)continue}
+    else{d=new Date(d0);d.setDate(day+k*({daily:1,weekly:7,biweekly:14}[rule]))}
+    const s=ymd(d);
+    if(s>lim)break;
+    if(mode==='until'&&s>until)break;
+    if(mode==='count'&&out.length>=count)break;
+    out.push(s);
+  }
+  return out;
+}
+function repeatLabel(rule,date){const d=parse(date),w=d.getDay();return {none:L('繰り返さない','Does not repeat'),daily:L('毎日','Daily'),weekly:L(`毎週 ${DOW[w]}曜日`,`Weekly on ${DOW_LONG[w]}`),biweekly:L(`隔週 ${DOW[w]}曜日`,`Every 2 weeks on ${DOW_LONG[w]}`),monthly:L(`毎月 ${d.getDate()}日`,`Monthly on day ${d.getDate()}`)}[rule]}
+function laterInSeries(x){return x&&x.seriesId?S.lessons.concat(S.events).filter(y=>y.seriesId===x.seriesId&&y.id!==x.id&&y.date>x.date&&(x.sid?y.sid===x.sid:true)):[]}
+function scopeHtml(what){const ev=what==='event';return `<div class="fld"><span class="lb">${L(`繰り返しの${ev?'予定':'レッスン'}`,`Repeating ${ev?'event':'lesson'}`)}</span><div class="radio"><label><input type="radio" name="scope" value="one" checked> ${L('この予定だけ','This one only')}</label><label><input type="radio" name="scope" value="after"> ${L('これ以降の予定すべて','This and all following')}<small>${L(`時刻・長さ・場所${ev?'・タイトル・種類・メモ':''}をまとめて変えます。消すときも、これ以降をまとめて消します`,`Changes time, length, location${ev?', title, type and notes':''} for all of them. Deleting also removes all following.`)}</small></label></div></div>`}
+
+/* 予定を追加（プライベートレッスン／柔道の予定） */
+function eventForm(o={}){
+  const ev=o.ev;
+  const tab=ev?'event':(o.kind||(UI.tab==='cal'&&UI.filter==='event'?'event':UI.tab==='home'&&UI.hfilter==='event'?'event':'lesson'));
+  const sid0=o.sid||(UI.tab==='stu'&&UI.sid)||null;
+  const date=ev?.date||o.date||today(), time=ev?.time||o.time||'16:00';
+  F.tdur=ev?(ev.dur||60):(sid0?stu(sid0).dur:60);
+  F.e={tab,ev,sids:sid0?[sid0]:[],type:ev?.type||'practice',carry:o.carry||null,useCarry:true};
+  F.confirmDelE=false;
+  const later=ev?laterInSeries(ev):[];
+  openSheet(ev?L('柔道の予定を編集','Edit judo event'):L('予定を追加','Add event'),`
+    ${ev?'':`<div class="tabs2"><button data-act="eTab" data-v="lesson" aria-pressed="${tab==='lesson'}">${L('プライベートレッスン','Private lesson')}</button><button data-act="eTab" data-v="event" aria-pressed="${tab==='event'}">${L('柔道の予定','Judo event')}</button></div>`}
+    <div class="only-lesson">
+      <div class="fld"><span class="lb">${L('生徒','Student')} <span class="hint" style="font-weight:400">— ${L('2人選ぶとペア','pick two for a pair')}</span></span><div class="chips">${S.students.map(x=>`<button class="chip" data-act="eStu" data-id="${x.id}" aria-pressed="${F.e.sids.includes(x.id)}">${esc(x.name)}</button>`).join('')||`<span class="hint">${L('先に「生徒」タブで生徒を追加してください。','Add a student in the Students tab first.')}</span>`}</div></div>
+      <div id="e-carry"></div>
+    </div>
+    <div class="only-event">
+      <div class="fld"><input class="ttl" id="e-title" maxlength="120" placeholder="${L('タイトルを追加','Add title')}" value="${esc(ev?.title||'')}" aria-label="${L('タイトル','Title')}"></div>
+      <div class="fld"><span class="lb">${L('種類','Type')}</span><div class="chips">${EVT.map(([k,,,c])=>`<button class="chip typechip" style="--c:var(${c})" data-act="eType" data-v="${k}" aria-pressed="${F.e.type===k}">${evtName(k)}</button>`).join('')}</div></div>
+      <div class="fld"><label class="check"><input type="checkbox" id="e-allday" ${ev?.allDay?'checked':''}> ${L('終日','All day')}</label></div>
+    </div>
+    <div class="two">
+      <div class="fld"><label for="e-date">${L('日付','Date')}</label><input type="date" id="e-date" value="${date}"></div>
+      <div class="fld" id="e-edbox"><label for="e-edate">${L('終了日（何日か続くとき）','End date (multi-day)')}</label><input type="date" id="e-edate" value="${ev?.edate||''}"></div>
+      <div class="fld e-times"><span class="lb">${L('開始','Start')}</span>${timeSel('e-st',time)}</div>
+      <div class="fld e-times"><span class="lb">${L('終了','End')}</span>${timeSel('e-en',fromMin(toMin(time)+F.tdur))}</div>
+    </div>
+    ${ev?(later.length?scopeHtml('event'):''):`<div class="fld"><label for="rp">${L('繰り返し','Repeat')}</label><select id="rp">${['none','weekly','biweekly','monthly','daily'].map(r=>`<option value="${r}">${repeatLabel(r,date)}</option>`).join('')}</select>
+      <div class="two" id="rp-end" hidden><div class="fld" style="margin:0"><label for="rp-mode">${L('終わり','Ends')}</label><select id="rp-mode"><option value="count">${L('回数で終わる','After a number of times')}</option><option value="until">${L('日付で終わる','On a date')}</option></select></div>
+      <div class="fld" style="margin:0" id="rp-cbox"><label for="rp-count">${L('回数','Times')}</label><input type="number" id="rp-count" inputmode="numeric" min="2" max="150" value="10"></div>
+      <div class="fld" style="margin:0" id="rp-ubox" hidden><label for="rp-until">${L('この日まで','Until')}</label><input type="date" id="rp-until" value="${addDays(date,90)}"></div></div>
+      <div class="hint" id="rp-sum"></div></div>`}
+    <div class="fld"><label for="e-place">${L('場所','Location')}</label><input id="e-place" maxlength="120" value="${esc(ev?.place||'')}" placeholder="${L('例：WJA道場','e.g. WJA Dojo')}"></div>
+    <div class="fld only-lesson"><label for="e-plan">${L('この日にやる予定','Plan for this lesson')}</label><textarea id="e-plan" maxlength="2000" style="min-height:60px" placeholder="${L('例：大外刈の連絡技（繰り返しのときは初回に入ります）','e.g. Osoto-gari combinations (for repeats, goes on the first one)')}"></textarea><div class="hint" id="e-price"></div></div>
+    <div class="fld only-event"><label for="e-memo">${L('メモ','Notes')}</label><textarea id="e-memo" maxlength="2000" style="min-height:60px" placeholder="${L('持ち物・集合時間・出る生徒など','What to bring, meeting time, who’s going…')}">${esc(ev?.memo||'')}</textarea></div>
+    <div style="display:grid;gap:10px;margin-top:6px">
+      <button class="btn block" data-act="saveEvent">${L('保存する','Save')}</button>
+      ${ev?`<button class="btn block ghost" data-act="delEvent" style="color:var(--due)">${L('この予定を消す','Delete this event')}</button>`:''}
+    </div>`);
+  refreshEv();
+}
+function refreshEv(){
+  const E=F.e, isL=E.tab==='lesson';
+  document.querySelectorAll('.only-lesson').forEach(x=>x.hidden=!isL);
+  document.querySelectorAll('.only-event').forEach(x=>x.hidden=isL);
+  const allDay=!isL&&g('e-allday').checked;
+  document.querySelectorAll('.e-times').forEach(x=>x.hidden=allDay);
+  g('e-edbox').hidden=!allDay;
+  const date=g('e-date').value||today();
+  if(g('rp')){
+    [...g('rp').options].forEach(op=>op.textContent=repeatLabel(op.value,date));
+    const r=g('rp').value;g('rp-end').hidden=r==='none';
+    const mode=g('rp-mode').value;g('rp-cbox').hidden=mode!=='count';g('rp-ubox').hidden=mode!=='until';
+    const n=repeatDates(date,r,mode,+g('rp-count').value||1,g('rp-until').value).length;
+    g('rp-sum').textContent=r==='none'?'':L(`${repeatLabel(r,date)}・${n}回分の予定ができます`,`${repeatLabel(r,date)} · creates ${n} events`);
+  }
+  if(isL){
+    const n=E.sids.length, d=durOf('e');
+    const pkLeft=n===1?activePkg(E.sids[0]).reduce((a,p)=>a+left(p),0):0;
+    g('e-price').textContent=!n?'':n>=2?L(`ペア ${d}分：1人 ${money(priceFor(E.sids[0],d,2))}（2人で ${money(priceFor(E.sids[0],d,2)*2)}）・支払いは記録のときに`,`Pair, ${d} min: ${money(priceFor(E.sids[0],d,2))} each (${money(priceFor(E.sids[0],d,2)*2)} total) · payment is set when you log it`)
+      :pkLeft?L(`回数券で入ります（残り ${pkLeft}回）・回数券はレッスンをした日に減ります`,`Uses the lesson pack (${pkLeft} left) · one is used on the day of the lesson`)
+      :L(`マンツーマン ${d}分：${money(priceFor(E.sids[0],d,1))}・支払いは記録のときに`,`Private, ${d} min: ${money(priceFor(E.sids[0],d,1))} · payment is set when you log it`);
+    const c=E.sids.map(sid=>E.carry&&byId(E.carry)?.sid===sid?byId(E.carry):pendingOf(sid)[0]).find(Boolean);
+    g('e-carry').innerHTML=c?`<div class="paybox" style="margin-bottom:14px"><label class="check"><input type="checkbox" id="e-usecarry" ${E.useCarry?'checked':''}> ${esc(stu(c.sid).name)}: ${L(`${md(c.date)} にキャンセルした分の振替にする`,`make-up for ${md(c.date)}`)}</label><div class="hint">${L(`やる予定だった内容${c.pay.mode==='per'&&c.pay.paid?'と前払いの代金':''}を引き継ぎます${c.pay.mode==='ticket'?'（回数券は減っていません）':''}。`,`Carries over the plan${c.pay.mode==='per'&&c.pay.paid?' and the prepayment':''}${c.pay.mode==='ticket'?' (the pack was not used)':''}.`)}</div></div>`:'';
+    E.carryObj=c||null;
+  }
+}
+function saveEvent(){
+  const E=F.e, isL=E.tab==='lesson';
+  const date=g('e-date').value||today();
+  const allDay=!isL&&g('e-allday').checked;
+  const time=allDay?'':readT('e-st'), dur=allDay?0:durOf('e');
+  if(!allDay&&dur<=0){toast(L('終了の時刻を開始より後にしてください','End time must be after the start'));return}
+  const place=g('e-place').value.trim();
+  const when=(d,t)=>`${dl(d)}${allDay?' '+L('終日','all day'):' '+t}`;
+  if(E.ev){
+    const title=g('e-title').value.trim()||evtName(E.type);
+    const scope=document.querySelector('input[name="scope"]:checked')?.value;
+    const edate=allDay&&g('e-edate').value>date?g('e-edate').value:'';
+    Object.assign(E.ev,{title,type:E.type,date,time,dur,allDay,edate,place,memo:g('e-memo').value.trim()});
+    if(scope==='after')laterInSeries(E.ev).forEach(x=>Object.assign(x,{title,type:E.type,time,dur,allDay,place,memo:E.ev.memo}));
+    run(()=>{save();closeSheet();render()},L('予定を保存しました','Event saved'),scope==='after'?L('これ以降の予定もまとめて変えました','All following events updated too'):'');return;
+  }
+  const rule=g('rp').value, dates=repeatDates(date,rule,g('rp-mode').value,Math.max(1,+g('rp-count').value||1),g('rp-until').value);
+  const series=dates.length>1?uid():null;
+  const rep=dates.length>1?L(`${repeatLabel(rule,date)}で${dates.length}回分`,`${repeatLabel(rule,date)}, ${dates.length} times`):'';
+  if(isL){
+    if(!E.sids.length){toast(L('生徒を選んでください','Pick a student'));return}
+    const n=E.sids.length, plan=g('e-plan').value.trim();
+    const useC=E.carryObj&&g('e-usecarry')?.checked;
+    dates.forEach((d,i)=>{
+      const gid=n>1?uid():null;
+      E.sids.forEach(sid=>{
+        const rec={id:uid(),sid,gid,seriesId:series,date:d,time,dur,place,status:'planned',waza:[],content:'',next:'',plan:i===0?plan:'',pay:defaultPay(sid,n,dur),cancel:null,from:null};
+        if(i===0&&useC&&E.carryObj.sid===sid)applyCarry(E.carryObj,rec);
+        S.lessons.push(rec);
+      });
+    });
+    run(()=>{save();closeSheet();UI.anchor=date;render()},L('予定を入れました','Scheduled'),`${names(E.sids.map(sid=>({sid})))} · ${rep||when(date,time)}`);
+  }else{
+    const title=g('e-title').value.trim()||evtName(E.type);
+    const span=allDay&&g('e-edate').value>date?Math.round((parse(g('e-edate').value)-parse(date))/864e5):0;
+    dates.forEach(d=>S.events.push({id:uid(),type:E.type,title,date:d,time,dur,allDay,edate:span?addDays(d,span):'',place,memo:g('e-memo').value.trim(),seriesId:series}));
+    run(()=>{save();closeSheet();UI.anchor=date;render()},L('予定を入れました','Event added'),`${title} · ${rep||when(date,time)}`);
+  }
+}
+function applyCarry(c,rec){
+  if(c.pay.mode==='per'&&c.pay.paid)rec.pay={...c.pay};
+  else if(c.pay.mode==='ticket'){const pk=S.packages.find(p=>p.id===c.pay.pid);if(pk&&left(pk)>0&&!rec.gid)rec.pay={mode:'ticket',pid:pk.id}}
+  if(c.plan&&!rec.plan.includes(c.plan))rec.plan=[c.plan,rec.plan].filter(Boolean).join('\n');
+  c.pay={mode:'none'};c.cancel.carry='moved';c.cancel.to=rec.id;rec.from=c.id;
+}
+
+/* キャンセル */
+function cancelForm(id){
+  const l=byId(id), grp=group(l);
+  const nxt=nextPlanned(l);
+  F.cxl={id,reason:REASONS[0]};
+  openSheet(L('キャンセルにする','Cancel lesson'),`
+    <div class="prev"><b>${dl(l.date)} ${l.time}–</b>${esc(names(grp))}${l.plan?`<br>${L('予定','Plan')}: ${esc(l.plan)}`:''}</div>
+    ${grp.length>1?`<div class="fld"><span class="lb">${L('誰が休みますか','Who is out?')}</span><div class="radio">
+      <label><input type="radio" name="who" value="all" checked> ${L('2人とも（このレッスンをなくす）','Both (no lesson)')}</label>
+      ${grp.map(x=>`<label><input type="radio" name="who" value="${x.sid}"> ${L(`${esc(stu(x.sid).name)} だけ`,`Only ${esc(stu(x.sid).name)}`)}<small>${L('もう1人はマンツーマンとして続けます','The other student continues as a private lesson')}</small></label>`).join('')}</div></div>`:''}
+    <div class="fld"><span class="lb">${L('理由','Reason')}</span><div class="chips">${REASONS.map(r=>`<button class="chip" data-act="cxReason" data-v="${r}" aria-pressed="${r===REASONS[0]}">${tReason(r)}</button>`).join('')}</div></div>
+    <div class="fld"><span class="lb">${L('繰り越し','Carry over')}</span><div class="radio">
+      ${nxt?`<label><input type="radio" name="carry" value="next" checked> ${L(`次の予定（${dl(nxt.date)}）に繰り越す`,`Carry over to the next lesson (${dl(nxt.date)})`)}<small>${L('やる予定だった内容と、前払い分を次の予定に引き継ぎます','Moves the plan and any prepayment to the next lesson')}</small></label>`:''}
+      <label><input type="radio" name="carry" value="new" ${nxt?'':'checked'}> ${L('振替の日にちを決める','Pick a make-up date')}<small>${L('新しく予定を入れて、内容と支払いを引き継ぎます','Schedules a new lesson with the plan and payment carried over')}</small></label>
+      <div class="two" id="cx-newbox" ${nxt?'hidden':''}><div class="fld" style="margin:0"><label for="cx-date">${L('振替の日付','Make-up date')}</label><input type="date" id="cx-date" value="${addDays(l.date,7)}"></div><div class="fld" style="margin:0"><span class="lb">${L('時間','Time')}</span>${timeSel('cx-t',l.time)}</div></div>
+      <label><input type="radio" name="carry" value="later"> ${L('振替の日にちはあとで決める','Decide the make-up later')}<small>${L('ホームに「振替待ち」として残り、次に予定を入れると自動で振替になります','Stays on Home as a pending make-up; the next lesson you add becomes the make-up')}</small></label>
+      <label><input type="radio" name="carry" value="none"> ${L('繰り越さない','Don’t carry over')}</label>
+      <div id="cx-feebox" hidden class="paybox"><label class="check"><input type="checkbox" id="cx-fee"> ${L('キャンセル料をいただく','Charge a cancellation fee')}</label><div class="two"><div class="fld" style="margin:0"><label for="cx-amt">${L('金額（$）','Amount ($)')}</label><input type="number" id="cx-amt" inputmode="decimal" value="${l.pay.mode==='per'?l.pay.amount:priceFor(l.sid,l.dur,grp.length)}"></div></div></div>
+    </div></div>
+    <p class="hint">${L('回数券はキャンセルでは減りません。','Cancelling never uses a lesson from the pack.')}</p>
+    <button class="btn block danger" data-act="cancelSave" style="background:var(--due);color:var(--card)">${L('キャンセルにする','Cancel lesson')}</button>`);
+}
+function nextPlanned(l,ex=[]){return sortL(S.lessons.filter(x=>x.sid===l.sid&&x.status==='planned'&&x.id!==l.id&&!ex.includes(x.id)&&(x.date+x.time)>(l.date+l.time)))[0]}
+function moveTo(c,t){
+  if(c.plan)t.plan=[c.plan,t.plan].filter(Boolean).join('\n');
+  if(c.pay.mode==='per'&&c.pay.paid){
+    if(t.pay.mode==='per'&&!t.pay.paid){t.pay={...c.pay}}
+    else{c.cancel.carry='pending';return false} // 次も支払い済みなら、振替待ちとして残す
+  }
+  c.pay={mode:'none'};c.cancel.carry='moved';c.cancel.to=t.id;t.from=c.id;return true;
+}
+function cancelSave(){
+  const l=byId(F.cxl.id), grp=group(l);
+  const who=document.querySelector('input[name="who"]:checked')?.value||'all';
+  const opt=document.querySelector('input[name="carry"]:checked').value;
+  const targets=who==='all'?grp:grp.filter(x=>x.sid===who);
+  const ids=targets.map(x=>x.id);
+  let msg='';
+  const ng=opt==='new'&&targets.length>1?uid():null;
+  targets.forEach(c=>{
+    c.status='cancelled';c.cancel={reason:F.cxl.reason,on:today(),carry:'none'};
+    if(opt==='next'){const t=nextPlanned(c,ids);if(t){moveTo(c,t);msg=L(`次の予定 ${md(t.date)} に繰り越しました`,`Carried over to ${dl(t.date)}`)}else{c.cancel.carry='pending';msg=L('振替待ちにしました','Marked as pending make-up')}}
+    else if(opt==='new'){const d=g('cx-date').value||addDays(c.date,7);const t={id:uid(),sid:c.sid,gid:ng,date:d,time:readT('cx-t'),place:c.place||'',seriesId:null,dur:c.dur,status:'planned',waza:[],content:'',next:'',plan:'',pay:defaultPay(c.sid,targets.length,c.dur),cancel:null,from:null};S.lessons.push(t);moveTo(c,t);msg=L(`振替を ${dl(d)} に入れました`,`Make-up scheduled: ${dl(d)}`)}
+    else if(opt==='later'){c.cancel.carry='pending';msg=L('ホームの「振替待ち」に残しました','Listed on Home under make-ups to schedule')}
+    else{
+      if(g('cx-fee').checked){const wasPaid=c.pay.mode==='per'&&c.pay.paid;c.pay={mode:'per',amount:+g('cx-amt').value||0,paid:wasPaid,method:wasPaid?c.pay.method:'',paidOn:wasPaid?c.pay.paidOn:''};c.cancel.fee=true;msg=wasPaid?L('前払い分をキャンセル料にしました','Prepayment kept as the cancellation fee'):L('キャンセル料を未払いに入れました','Cancellation fee added to payments due')}
+      else{c.pay={mode:'none'};msg=L('繰り越しはしません','Not carried over')}
+    }
+  });
+  if(who!=='all'){const rest=grp.filter(x=>x.sid!==who);if(rest.length===1){rest[0].gid=null;if(rest[0].pay.mode==='per'&&!rest[0].pay.paid)rest[0].pay.amount=priceFor(rest[0].sid,rest[0].dur,1)}targets.forEach(x=>x.gid=null)}
+  run(()=>{save();closeSheet();render()},L('キャンセルにしました','Lesson cancelled'),msg);
+}
+
+function stuForm(s){
+  F.custom=s?.custom30!=null;
+  openSheet(s?L('生徒を編集','Edit student'):L('生徒を追加','Add student'),`
+    <div class="fld"><label for="s-name">${L('名前','Name')}</label><input id="s-name" value="${esc(s?.name||'')}" placeholder="${L('例：Ken Tanaka','e.g. Ken Tanaka')}"></div>
+    <div class="fld"><span class="lb">${L('料金（マンツーマン）','Rate (private)')}</span><div class="radio">
+      <label><input type="radio" name="price" value="std" ${F.custom?'':'checked'}> ${L(`標準：30分 ${money(S.settings.solo30)}`,`Standard: ${money(S.settings.solo30)} / 30 min`)}</label>
+      <label><input type="radio" name="price" value="custom" ${F.custom?'checked':''}> ${L('この生徒だけ別の料金','Custom rate for this student')}</label></div>
+      <div class="two" id="s-cbox" ${F.custom?'':'hidden'}><div class="fld" style="margin:0"><label for="s-c30">${L('30分あたり（$）','Per 30 min ($)')}</label><input type="number" id="s-c30" inputmode="decimal" value="${s?.custom30??S.settings.solo30+10}"></div></div>
+      <div class="hint">${L('ペアのときは「設定」のペア料金を使います。1回ごとに金額を変えることもできます。','Pair lessons use the pair rate in Settings. You can also change the amount for any single lesson.')}</div></div>
+    <div class="fld"><label for="s-dur">${L('いつもの長さ（分）','Usual length (min)')}</label><input type="number" id="s-dur" inputmode="numeric" step="30" value="${s?.dur??60}"></div>
+    <div class="fld"><label for="s-memo">${L('メモ（年齢・目標・連絡先など）','Notes (age, goals, contact…)')}</label><textarea id="s-memo" maxlength="2000">${esc(s?.memo||'')}</textarea></div>
+    <button class="btn block" data-act="saveStu" data-id="${s?.id||''}">${L('保存する','Save')}</button>`);
+}
+function settingsForm(){
+  openSheet(L('設定','Settings'),`
+    <div class="fld"><span class="lb">${L('言語','Language')}</span><div class="seg" style="grid-template-columns:1fr 1fr">${[['ja','日本語'],['en','English']].map(([k,n])=>`<button data-act="setLang" data-v="${k}" aria-pressed="${LANGV===k}">${n}</button>`).join('')}</div>
+      <div class="hint">${L('入力した名前やメモはそのままです。通知も選んだ言語で届きます。','Names and notes you typed stay as they are. Notifications use this language too.')}</div></div>
+    <div class="fld"><span class="lb">${L('通知：前の日の夜に翌日の予定','Notification: tomorrow’s schedule the night before')}</span>
+      <div class="two"><div class="fld" style="margin:0"><label for="st-remind">${L('届く時刻','Time')}</label><select id="st-remind"><option value="off" ${S.settings.remind==='off'?'selected':''}>${L('送らない','Off')}</option>${[...Array(48)].map((_,i)=>{const t=fromMin(i*30);return `<option value="${t}" ${S.settings.remind===t?'selected':''}>${t}</option>`}).join('')}</select></div></div>
+      <div id="push-box">${pushBox()}</div>
+      <div class="hint">${L('予定がない日は届きません。時刻はこの端末の時間帯（','No notification on days with nothing scheduled. Time zone: ')}${esc(S.settings.tz||deviceTz())}${L('）で数えます。',' (this device).')}</div></div>
+    <div class="fld"><span class="lb">${L('料金','Rates')}</span></div>
+    <div class="two"><div class="fld"><label for="st-solo">${L('マンツーマン：30分あたり（$）','Private: per 30 min ($)')}</label><input type="number" id="st-solo" inputmode="decimal" value="${S.settings.solo30}"></div>
+    <div class="fld"><label for="st-pair">${L('ペア：1時間あたり・2人の合計（$）','Pair: per hour, both students total ($)')}</label><input type="number" id="st-pair" inputmode="decimal" value="${S.settings.pair60}"></div></div>
+    <div class="prev"><b>${L('いまの設定での例','Example with these rates')}</b>${L(`マンツーマン 60分 ＝ ${money(S.settings.solo30*2)}<br>ペア 60分 ＝ ${money(S.settings.pair60)}（1人 ${money(S.settings.pair60/2)}）`,`Private 60 min = ${money(S.settings.solo30*2)}<br>Pair 60 min = ${money(S.settings.pair60)} (${money(S.settings.pair60/2)} each)`)}</div>
+    <p class="hint">${L('「別の料金」にしている生徒はそちらが優先されます。変更はこれから入れるレッスンに使われ、記録済みの金額は変わりません。','Students with a custom rate keep their own rate. Changes apply to new lessons; logged amounts stay the same.')}</p>
+    <button class="btn block" data-act="saveSettings">${L('料金を保存する','Save rates')}</button>
+    <div class="fld" style="margin-top:22px"><span class="lb">${L('アカウント','Account')}</span><div class="chips" style="align-items:center"><span>${L('ログイン中：','Signed in as ')}<b>${esc(SESSION?.login||'')}</b></span><button class="btn sm ghost" data-act="logout">${L('ログアウト','Sign out')}</button></div></div>`);
+  refreshPushState();
+}
+function pkgForm(sid){
+  const s=stu(sid);
+  F.method='Zelle';
+  const per=priceFor(sid,s.dur,1);
+  openSheet(L('回数券を追加','Add lesson pack'),`
+    <div class="prev"><b>${esc(s.name)}</b>${L('先にいただいた回数分を登録します。レッスンをした日に残りが1回減ります（キャンセルでは減りません）。','Record lessons paid in advance. One is used each time a lesson happens (not when cancelled).')}</div>
+    <div class="fld"><span class="lb">${L('回数','Lessons')}</span><div class="chips">${[4,5,8,10].map(n=>`<button class="chip" data-act="pkgN" data-v="${n}" data-per="${per}" aria-pressed="${n===10}">${N(n,'回','lesson')}</button>`).join('')}</div></div>
+    <div class="two"><div class="fld"><label for="k-count">${L('回数','Lessons')}</label><input type="number" id="k-count" inputmode="numeric" value="10"></div>
+    <div class="fld"><label for="k-price">${L('合計金額（$）','Total ($)')}</label><input type="number" id="k-price" inputmode="decimal" value="${per*10}"></div>
+    <div class="fld"><label for="k-date">${L('購入日','Purchase date')}</label><input type="date" id="k-date" value="${today()}"></div></div>
+    <div class="hint" style="margin:-6px 0 12px">${L(`1回 ${s.dur}分 ${money(per)} × 回数で計算しています。割引するときは合計金額を直してください。`,`Calculated as ${money(per)} per ${s.dur}-min lesson × count. Edit the total to give a discount.`)}</div>
+    <div class="fld"><label class="check"><input type="checkbox" id="k-paid" checked> ${L('代金は受け取り済み','Payment received')}</label></div>
+    <div class="fld" id="k-mbox"><span class="lb">${L('受け取り方法','Payment method')}</span>${methodChips('fMethodK',F.method)}</div>
+    <button class="btn block" data-act="savePkg" data-sid="${sid}">${L('追加する','Add')}</button>`);
+}
+function receiveForm(kind,id){
+  F.method='現金';
+  const items=kind==='stu'?unpaidLessons().filter(l=>l.sid===id):[];
+  const total=kind==='stu'?items.reduce((a,l)=>a+ +l.pay.amount,0):S.packages.find(p=>p.id===id).price;
+  const s=stu(kind==='stu'?id:S.packages.find(p=>p.id===id).sid);
+  F.recv={kind,id,ids:items.map(l=>l.id)};
+  openSheet(L('代金を受け取る','Record payment'),`
+    <div class="prev"><b>${esc(s.name)}</b>${kind==='stu'?items.map(l=>`${dl(l.date)} ${l.status==='cancelled'?L('キャンセル料 ','cancel fee '):l.gid?L('ペア ','pair '):''}${money(l.pay.amount)}`).join('<br>'):L('回数券','Lesson pack')}</div>
+    ${kind==='stu'&&items.length>1?`<div class="fld"><span class="lb">${L('どの回の分ですか','Which lessons?')}</span><div class="chips">${items.map(l=>`<button class="chip" data-act="recvPick" data-id="${l.id}" aria-pressed="true">${md(l.date)}</button>`).join('')}</div></div>`:''}
+    <div class="fld"><span class="lb">${L('受け取り方法','Payment method')}</span>${methodChips('fMethodK',F.method)}</div>
+    <button class="btn block paid" data-act="saveRecv" id="r-btn">${recvLabel(total)}</button>`);
+}
+const recvLabel=t=>L(`${money(t)} を受け取りました`,`Received ${money(t)}`);
+function csvSheet(scope){
+  const y=UI.month.slice(0,4);
+  const rows=income().filter(r=>scope==='year'?r.date.startsWith(y):r.date.startsWith(UI.month));
+  const q=v=>`"${String(v).replace(/"/g,'""')}"`;
+  const head=L('受取日,生徒,内容,レッスン日,金額(USD),受け取り方法','Date received,Student,Item,Lesson date,Amount (USD),Method');
+  const csv=[head,...rows.map(r=>[r.date,stu(r.sid).name,r.kind,r.lessonDate,r.amount,r.method?tMethod(r.method):''].map(q).join(','))].join('\n');
+  openSheet(scope==='year'?L(`${y}年のCSV`,`CSV: ${y}`):L(`${+UI.month.slice(5)}月のCSV`,`CSV: ${ymTitle(+y,+UI.month.slice(5))}`),`
+    <p class="hint" style="margin-top:0">${L('ファイルとして保存するか、コピーして Numbers や Excel に貼り付けてください。','Save it as a file, or copy and paste into Numbers or Excel.')}</p>
+    <div class="fld"><textarea id="csv-text" readonly style="min-height:220px;font-family:var(--f-num);font-size:13px">${esc(csv)}</textarea></div>
+    <div style="display:grid;gap:10px"><button class="btn block" data-act="dlCsv" data-name="${scope==='year'?`my-schedule-${y}.csv`:`my-schedule-${UI.month}.csv`}">${L('ファイルで保存する','Save as file')}</button><button class="btn block ghost" data-act="copyCsv">${L('コピーする','Copy')}</button></div>`);
+}
+
+/* ---------- 完了の表示 ---------- */
+let tt;
+function toast(msg,sub=''){const t=g('toast');t.innerHTML=`${esc(msg)}${sub?`<small>${esc(sub)}</small>`:''}`;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2800)}
+async function run(fn,msg,sub){
+  toast(L('保存中…','Saving…'));
+  try{fn();await syncChain;toast('✓ '+msg,sub)}
+  catch(e){console.error(e);toast(L('この端末には保存しました','Saved on this device'),L('サーバーに送れませんでした。つながると自動で送ります。','Couldn’t reach the server. It will send automatically when online.'))}
+}
+const monthShift=(k,n)=>{const [y,m]=k.split('-').map(Number);const d=new Date(y,m-1+n,1);return `${d.getFullYear()}-${pad(d.getMonth()+1)}`};
+
+/* ---------- 操作 ---------- */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;
+  const a=b.dataset.act, v=b.dataset.v, id=b.dataset.id, sid=b.dataset.sid;
+  if(a==='closeBg'&&e.target!==b)return;
+  switch(a){
+    case 'tab':UI.tab=v;UI.sid=null;render();scrollTo(0,0);break;
+    case 'settings':settingsForm();break;
+    case 'setLang':{
+      if(LANGV===v)return;
+      LANGV=v;S.settings.lang=v;
+      try{localStorage.setItem('my-schedule-lang',v)}catch(e){}
+      save().catch(()=>{});render();settingsForm();toast(L('✓ 日本語にしました','✓ Switched to English'));break}
+    case 'loginLang':LANGV=v;try{localStorage.setItem('my-schedule-lang',v)}catch(e){}render();break;
+    case 'login':{
+      const id=g('lg-id').value.trim(),pw=g('lg-pw').value;
+      if(!id||!pw){UI.loginErr=L('IDとパスワードを入れてください','Enter your ID and password');render();return}
+      UI.busy=true;UI.loginErr='';render();
+      sb.auth.signInWithPassword({email:idToEmail(id),password:pw}).then(async({data,error})=>{UI.busy=false;
+        if(error){UI.loginErr=/invalid/i.test(error.message)?L('IDかパスワードが違います','Wrong ID or password'):L('ログインできませんでした。電波を確認してください。','Could not sign in. Check your connection.');render();g('lg-id').value=id;return}
+        await enter(data.user)}).catch(()=>{UI.busy=false;UI.loginErr=L('ログインできませんでした。電波を確認してください。','Could not sign in. Check your connection.');render()});
+      break}
+    case 'logout':{
+      if(DIRTY&&!b.dataset.sure){b.dataset.sure='1';b.textContent=L('未送信の変更があります。もう一度押すとログアウト','Unsent changes. Tap again to sign out');return}
+      sb.auth.signOut().finally(()=>{try{localStorage.removeItem(cacheKey())}catch(e){}SESSION=null;LOADED=false;S=emptyState();SNAP=new Map();DIRTY=false;closeSheet();render()});break}
+    case 'pushOn':enablePush().then(()=>{toast(L('✓ この端末で通知を受け取ります','✓ Notifications on for this device'));refreshPushState()}).catch(e=>toast(L('オンにできませんでした','Couldn’t turn on'),e.message));break;
+    case 'pushOff':disablePush().then(()=>{toast(L('この端末の通知をやめました','Notifications off for this device'));refreshPushState()}).catch(e=>toast(L('うまくいきませんでした','Something went wrong'),e.message));break;
+    case 'pushTest':case 'pushTomorrow':{
+      toast(L('送信中…','Sending…'));
+      sb.functions.invoke('my-schedule-push',{body:{type:a==='pushTest'?'test':'tomorrow'}}).then(({data,error})=>{
+        if(error)throw error;
+        if(data?.empty)toast(L('明日の予定はありません','Nothing scheduled tomorrow'),L('予定がない日は通知も届きません','No notification is sent on empty days'));
+        else toast(L(`✓ ${data?.sent||0}台に送りました`,`✓ Sent to ${data?.sent||0} device(s)`),data?.sent?'':L('この端末で通知をオンにしてください','Turn on notifications on this device'));
+      }).catch(e=>toast(L('送れませんでした','Couldn’t send'),e.message));break}
+    case 'hfilter':UI.hfilter=v;render();break;
+    case 'newEvent':eventForm({date:b.dataset.date,sid:b.dataset.sid,kind:b.dataset.kind});break;
+    case 'openEvent':eventForm({ev:S.events.find(x=>x.id===id)});break;
+    case 'eTab':F.e.tab=v;document.querySelectorAll('[data-act="eTab"]').forEach(x=>x.setAttribute('aria-pressed',x===b));refreshEv();break;
+    case 'eStu':{const on=!F.e.sids.includes(id);if(on&&F.e.sids.length>=2){toast(L('ペアは2人までです','A pair is two students'),L('先にどちらかを外してください','Deselect one first'));return}
+      F.e.sids=on?[...F.e.sids,id]:F.e.sids.filter(x=>x!==id);b.setAttribute('aria-pressed',on);
+      if(on&&F.e.sids.length===1){F.tdur=stu(id).dur;setT('e-en',fromMin(toMin(readT('e-st'))+F.tdur))}
+      refreshEv();break}
+    case 'eType':{const old=evtName(F.e.type);F.e.type=v;document.querySelectorAll('[data-act="eType"]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+      const t=g('e-title');if(!t.value.trim()||t.value===old)t.value=evtName(v);break}
+    case 'saveEvent':saveEvent();break;
+    case 'delEvent':{
+      if(!F.confirmDelE){F.confirmDelE=true;b.textContent=L('もう一度押すと消えます','Tap again to delete');return}
+      F.confirmDelE=false;
+      const after=document.querySelector('input[name="scope"]:checked')?.value==='after';
+      const ids=[F.e.ev.id,...(after?laterInSeries(F.e.ev).map(x=>x.id):[])];
+      S.events=S.events.filter(x=>!ids.includes(x.id));run(()=>{save();closeSheet();render()},L('予定を消しました','Event deleted'),ids.length>1?L(`${ids.length}件`,`${ids.length} events`):'');break}
+    case 'view':UI.tgScroll=null;if(v==='month'){UI.cal=UI.anchor.slice(0,7);UI.day=UI.anchor}else if(UI.view==='month')UI.anchor=UI.day;UI.view=v;render();break;
+    case 'filter':UI.filter=v;render();break;
+    case 'goToday':UI.anchor=today();UI.day=today();UI.cal=today().slice(0,7);UI.tgScroll=null;render();break;
+    case 'calNav':UI.tgScroll=null;if(UI.view==='month')UI.cal=monthShift(UI.cal,+v);else UI.anchor=addDays(UI.anchor,+v*{day:1,'3day':3,week:7}[UI.view]);render();break;
+    case 'gotoDay':UI.anchor=v;UI.view='day';render();break;
+    case 'slot':{const r=b.getBoundingClientRect();const mins=Math.floor((e.clientY-r.top)/HOUR*60/15)*15;eventForm({date:v,time:fromMin(mins)});break}
+    case 'saveSettings':S.settings={...S.settings,solo30:+g('st-solo').value||50,pair60:+g('st-pair').value||100,};run(()=>{save();closeSheet();render()},L('料金を保存しました','Rates saved'),L(`30分 ${money(S.settings.solo30)}・ペア1時間 ${money(S.settings.pair60)}`,`${money(S.settings.solo30)}/30 min · pair ${money(S.settings.pair60)}/hour`));break;
+    case 'newLesson':lessonForm(null,{date:b.dataset.date,sid:b.dataset.sid});break;
+    case 'openLesson':lessonForm(byId(id));break;
+    case 'close':case 'closeBg':closeSheet();break;
+    case 'day':UI.day=v;UI.anchor=v;render();break;
+    case 'sday':UI.sday=UI.sday===v?null:v;render();break;
+    case 'scalMove':UI.scal=monthShift(UI.scal,+v);UI.sday=null;render();break;
+    case 'monMove':UI.month=monthShift(UI.month,+v);render();break;
+    case 'openStu':UI.tab='stu';UI.sid=id;UI.sday=null;UI.scal=today().slice(0,7);render();scrollTo(0,0);break;
+    case 'backStu':UI.sid=null;render();break;
+    case 'toggleDone':UI.showDone=!UI.showDone;render();break;
+    case 'todoAdd':{const inp=g('todo-new'),t=inp.value.trim();if(!t){inp.focus();return}const s=stu(UI.sid);(s.todos=s.todos||[]).push({id:uid(),text:t,done:false});run(()=>{save();render();g('todo-new')?.focus()},L('追加しました','Added'),L('次のレッスンを記録するときに出てきます','It will show up when you log the next lesson'));break}
+    case 'todoToggle':{const s=stu(UI.sid),t=s.todos.find(x=>x.id===id);t.done=!t.done;t.doneOn=t.done?today():'';save().catch(()=>{});setTimeout(()=>{render();toast(t.done?L('✓ やったことに移しました','✓ Moved to done'):L('まだのリストに戻しました','Moved back to the to-do list'))},t.done?350:0);break}
+    case 'todoDel':{const s=stu(UI.sid);s.todos=s.todos.filter(x=>x.id!==id);save().catch(()=>{});render();toast(L('消しました','Deleted'));break}
+    case 'newStu':stuForm();break;
+    case 'editStu':stuForm(stu(id));break;
+    case 'saveStu':{
+      const name=g('s-name').value.trim();if(!name){toast(L('名前を入れてください','Enter a name'));return}
+      const custom=document.querySelector('input[name="price"]:checked').value==='custom';
+      const d={name,custom30:custom?(+g('s-c30').value||S.settings.solo30):null,dur:+g('s-dur').value||60,memo:g('s-memo').value.trim()};
+      if(id)Object.assign(stu(id),d);else S.students.push({id:uid(),color:COLORS[S.students.length%COLORS.length],todos:[],...d});
+      run(()=>{save();closeSheet();render()},id?L('保存しました','Saved'):L(`${name} さんを追加しました`,`Added ${name}`));break}
+    case 'newPkg':pkgForm(sid);break;
+    case 'pkgN':document.querySelectorAll('[data-act="pkgN"]').forEach(x=>x.setAttribute('aria-pressed',x===b));g('k-count').value=v;g('k-price').value=b.dataset.per*v;break;
+    case 'savePkg':{
+      const paid=g('k-paid').checked;
+      const p={id:uid(),sid,count:+g('k-count').value||10,price:+g('k-price').value||0,date:g('k-date').value||today(),paid,method:paid?F.method:''};
+      if(paid)p.paidOn=p.date;
+      S.packages.push(p);
+      S.lessons.forEach(l=>{if(l.sid===p.sid&&l.status==='planned'&&!l.gid&&!(l.pay.mode==='per'&&l.pay.paid)&&l.pay.mode!=='ticket')l.pay={mode:'ticket',pid:p.id}});
+      run(()=>{save();closeSheet();render()},L(`${p.count}回券を追加しました`,`Added a ${p.count}-lesson pack`),paid?`${money(p.price)} (${tMethod(p.method)})`:L('未払いとしてホームに出ます','Shows on Home as payment due'));break}
+    case 'receive':receiveForm('stu',sid);break;
+    case 'receivePkg':receiveForm('pkg',id);break;
+    case 'recvPick':{const on=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',on);F.recv.ids=on?[...F.recv.ids,id]:F.recv.ids.filter(x=>x!==id);
+      g('r-btn').textContent=recvLabel(F.recv.ids.reduce((s,i)=>s+ +byId(i).pay.amount,0));break}
+    case 'saveRecv':{
+      const r=F.recv,t=today();let sum=0;
+      if(r.kind==='stu'){if(!r.ids.length){toast(L('受け取った回を選んでください','Pick the lessons paid for'));return}r.ids.forEach(i=>{const l=byId(i);Object.assign(l.pay,{paid:true,method:F.method,paidOn:t});sum+= +l.pay.amount})}
+      else{const p=S.packages.find(x=>x.id===r.id);Object.assign(p,{paid:true,method:F.method,paidOn:t});sum=p.price}
+      run(()=>{save();closeSheet();render()},recvLabel(sum),L(`${tMethod(F.method)}・ありがとうございました`,`${tMethod(F.method)} · thank you`));break}
+    case 'fStu':{
+      const on=!F.sids.includes(id);
+      if(on&&F.sids.length>=2){toast(L('ペアは2人までです','A pair is two students'),L('先にどちらかを外してください','Deselect one first'));return}
+      if(!on&&F.sids.length===1)return;
+      F.sids=on?[...F.sids,id]:F.sids.filter(x=>x!==id);
+      b.setAttribute('aria-pressed',on);
+      const d=durOf('f')||60;
+      F.sids.forEach(x=>{if(!F.pay[x]||F.sids.length>1&&F.pay[x].mode==='ticket'&&!F.ids[x])F.pay[x]=payState(null,x,F.sids.length,d)});
+      recalcAmounts();
+      F.sids.forEach(x=>{if(F.isNew&&!F.carry[x]&&pendingOf(x)[0])F.carry[x]=pendingOf(x)[0].id});
+      Object.keys(F.carry).forEach(x=>{if(!F.sids.includes(x))delete F.carry[x]});
+      refreshForm();break}
+    case 'fWaza':{const on=!F.waza.includes(v);F.waza=on?[...F.waza,v]:F.waza.filter(x=>x!==v);b.setAttribute('aria-pressed',on);break}
+    case 'fTodo':{const on=!F.todo.has(id);on?F.todo.add(id):F.todo.delete(id);b.setAttribute('aria-pressed',on);break}
+    case 'fMode':F.pay[sid].mode=v;renderPay();break;
+    case 'fPkg':F.pay[sid].pid=id;renderPay();break;
+    case 'fMethod':F.pay[sid].method=v;b.parentElement.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));break;
+    case 'fMethodK':F.method=v;b.parentElement.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));break;
+    case 'fCarry':{if(b.checked)F.carry[sid]=pendingOf(sid)[0]?.id;else delete F.carry[sid];renderPay();break}
+    case 'saveLesson':saveLesson(b.dataset.as);break;
+    case 'delLesson':{
+      if(!F.confirmDel){F.confirmDel=true;b.textContent=L('もう一度押すと消えます','Tap again to delete');return}
+      const ids=Object.values(F.ids);
+      if(document.querySelector('input[name="scope"]:checked')?.value==='after'){const f=byId(ids[0]);laterInSeries(f).filter(x=>x.status==='planned').forEach(x=>ids.push(x.id))}
+      S.lessons.forEach(l=>{if(l.cancel?.to&&ids.includes(l.cancel.to)){l.cancel.carry='pending';delete l.cancel.to}});
+      S.lessons=S.lessons.filter(l=>!ids.includes(l.id));run(()=>{save();closeSheet();render()},L('消しました','Deleted'));break}
+    case 'cancelOpen':cancelForm(id);break;
+    case 'cxReason':F.cxl.reason=v;b.parentElement.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));break;
+    case 'cancelSave':cancelSave();break;
+    case 'uncancel':{const l=byId(id);
+      if(l.cancel?.carry==='moved'){const t=byId(l.cancel.to);if(t&&t.from===l.id){if(t.pay.mode==='per'&&t.pay.paid&&l.pay.mode!=='per'){l.pay={...t.pay};t.pay=defaultPay(t.sid,1,t.dur)}t.from=null}}
+      if(l.pay.mode==='none')l.pay=defaultPay(l.sid,1,l.dur);
+      l.status='planned';l.cancel=null;run(()=>{save();closeSheet();render()},L('予定に戻しました','Back to scheduled'));break}
+    case 'schedCarry':{const c=byId(id);closeSheet();eventForm({kind:'lesson',sid:c.sid,carry:c.id,date:addDays(today(),1),time:c.time});break}
+    case 'csv':csvSheet(v);break;
+    case 'dlCsv':{const blob=new Blob(['\ufeff'+g('csv-text').value],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(blob);const a2=document.createElement('a');a2.href=u;a2.download=b.dataset.name;document.body.appendChild(a2);a2.click();a2.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);toast(L('✓ 保存しました','✓ Saved'));break}
+    case 'copyCsv':{const ta=g('csv-text');const fb=()=>{ta.select();toast(L('選択しました','Selected'),L('⌘C（コピー）で写せます','Press ⌘C to copy'))};
+      if(navigator.clipboard)navigator.clipboard.writeText(ta.value).then(()=>toast(L('✓ コピーしました','✓ Copied'))).catch(fb);else fb();break}
+  }
+});
+document.addEventListener('input',e=>{
+  if(e.target.classList.contains('f-amount'))F.pay[e.target.dataset.sid].amount=e.target.value;
+});
+document.addEventListener('change',e=>{
+  const id=e.target.id;
+  if(id==='f-book'){g('f-bookbox').hidden=!e.target.checked;g('f-bookhint').hidden=!e.target.checked}
+  if(id==='k-paid')g('k-mbox').hidden=!e.target.checked;
+  if(id==='f-date'&&g('f-bdate'))g('f-bdate').value=addDays(e.target.value,7);
+  const tm=id.match(/^(f|e)-(st|en)-[hm]$/);
+  if(tm){const P=tm[1];
+    if(tm[2]==='st')setT(P+'-en',fromMin(toMin(readT(P+'-st'))+F.tdur));else F.tdur=durOf(P);
+    if(P==='f'){recalcAmounts();renderPay()}else refreshEv()}
+  if(id==='e-date'||id==='e-allday'||id==='rp'||id==='rp-mode'||id==='rp-count'||id==='rp-until')refreshEv();
+  if(e.target.name==='carry'){g('cx-newbox').hidden=e.target.value!=='new';g('cx-feebox').hidden=e.target.value!=='none'}
+  if(e.target.name==='price')g('s-cbox').hidden=e.target.value!=='custom';
+  if(id==='st-remind'){S.settings.remind=e.target.value;run(()=>save(),e.target.value==='off'?L('通知を止めました','Notifications turned off'):L(`通知の時刻を ${e.target.value} にしました`,`Notification time set to ${e.target.value}`),e.target.value==='off'?'':L('前の日のこの時刻に、翌日の予定が届きます','Tomorrow’s schedule arrives at this time the night before'))}
+});
+document.addEventListener('keydown',e=>{
+  if(e.target.id==='f-waza-add'&&e.key==='Enter'&&!e.isComposing){
+    e.preventDefault();const w=e.target.value.trim();if(!w)return;
+    if(!F.waza.includes(w))F.waza.push(w);e.target.value='';
+    let chip=[...document.querySelectorAll('[data-act="fWaza"]')].find(x=>x.dataset.v===w);
+    if(!chip){const box=document.createElement('div');box.className='chips';box.style.marginTop='6px';chip=document.createElement('button');chip.className='chip';chip.dataset.act='fWaza';chip.dataset.v=w;chip.textContent=w;box.appendChild(chip);e.target.before(box)}
+    chip.setAttribute('aria-pressed','true');
+  }
+  if(e.target.id==='todo-new'&&e.key==='Enter'&&!e.isComposing){e.preventDefault();document.querySelector('[data-act="todoAdd"]').click()}
+  if((e.target.id==='lg-pw'||e.target.id==='lg-id')&&e.key==='Enter'&&!e.isComposing){e.preventDefault();document.querySelector('[data-act="login"]')?.click()}
+  if(e.key==='Escape')closeSheet();
+});
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(UI.tab==='cal'&&!g('layer').innerHTML)render()},200)});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+start();
+</script>
+</body>
+</html>
