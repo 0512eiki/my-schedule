@@ -236,6 +236,33 @@ td.r,th.r{text-align:right;font-family:var(--f-num)}
 .ttl:focus{border-bottom-color:var(--accent);outline:none}
 .typechip{--c:var(--t-other)}
 .pairchip{border-style:dashed;border-width:1.5px;font-weight:700}
+.sheet:has(.foot){padding-bottom:0}
+.foot{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:10px 0 calc(12px + env(safe-area-inset-bottom,0px));margin-top:10px;display:grid;gap:8px;z-index:3}
+.whenbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:10px;margin-bottom:14px}
+.whenbox .lb{font-size:13px;font-weight:700;color:var(--muted)}
+.trow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.trow select{width:auto;min-width:104px;font-family:var(--f-num);font-size:18px;padding:10px 12px}
+.trow .arrow{color:var(--muted)}
+.trow .dlabel{font-size:13px;color:var(--muted)}
+.drow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.drow input[type=date]{width:auto;flex:1;min-width:150px}
+.stepper{display:inline-flex;align-items:center;gap:6px}
+.stepper button{border:0;background:var(--soft);border-radius:999px;width:36px;height:36px;font-size:18px;font-weight:700}
+.stepper input{width:64px;text-align:center}
+.pricebar{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--accent-soft);color:var(--accent);border-radius:12px;padding:10px 12px;font-weight:700;margin-bottom:14px}
+.pricebar small{font-weight:400;color:var(--ink);opacity:.8;display:block}
+.pricebar b{font-family:var(--f-num);font-size:20px;white-space:nowrap}
+.bars div{position:relative}
+.bars i.proj{background:repeating-linear-gradient(45deg,var(--accent-soft) 0 4px,transparent 4px 8px);border:1px dashed var(--accent);border-bottom:0;border-radius:6px 6px 0 0}
+.bars i.got{border-radius:0}
+.bars i.got:first-of-type{border-radius:6px 6px 0 0}
+.projcard .line{display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.projcard .line:first-of-type{border-top:0}
+.projcard .line b{font-family:var(--f-num);font-weight:500}
+.projcard .line.total{font-weight:700;font-size:16px}
+.projcard .line.total b{font-size:20px;color:var(--accent)}
+.kpi.link{cursor:pointer}
+.kpi.proj b{color:var(--accent)}
 .typechip[aria-pressed="true"]{background:var(--c);border-color:var(--c);color:var(--card)}
 @media (min-width:900px){
   nav.side{display:flex;flex-direction:column;gap:4px;width:210px;flex:none;padding:22px 14px;border-right:1px solid var(--line);position:sticky;top:0;height:100vh}
@@ -485,6 +512,18 @@ function pushBox(){
     :st==='unsupported'?`<div class="hint">${L('このブラウザは通知に対応していません。','This browser doesn’t support notifications.')}</div>`:`<div class="hint">${L('確認中…','Checking…')}</div>`;
 }
 
+/* 今月の見込み：受け取り済み＋まだの分（その月のレッスンの未払い）＋これからの予定（未払いの分） */
+function projection(month){
+  const got=income().filter(r=>r.date.startsWith(month)).reduce((a,r)=>a+r.amount,0);
+  const inM=S.lessons.filter(l=>l.date.startsWith(month));
+  const unpaid=inM.filter(isUnpaid).reduce((a,l)=>a+ +l.pay.amount,0);
+  const plannedL=inM.filter(l=>l.status==='planned');
+  const planned=plannedL.filter(l=>l.pay.mode==='per'&&!l.pay.paid).reduce((a,l)=>a+ +l.pay.amount,0);
+  const plannedPack=dedupe(plannedL.filter(l=>l.pay.mode==='ticket')).length;
+  const plannedCount=dedupe(plannedL).length;
+  const doneCount=dedupe(inM.filter(l=>l.status==='done')).length;
+  return {got,unpaid,planned,plannedPack,plannedCount,doneCount,total:got+unpaid+planned};
+}
 /* お金の流れ：受け取った日で数える */
 function income(){
   const rows=[];
@@ -540,7 +579,7 @@ function payPill(l){
     if(l.pay.mode==='per'&&+l.pay.amount>0)return `<span class="pill ${l.pay.paid?'off':'due'}">${L('キャンセル料','Cancel fee')} ${money(l.pay.amount)}</span>`;
     return `<span class="pill off">${L('キャンセル','Cancelled')}</span>`;
   }
-  if(l.status==='planned')return `<span class="pill plan">${l.pay.mode==='per'&&l.pay.paid?L('予定・前払い済み','Scheduled · prepaid'):L('予定','Scheduled')}</span>`;
+  if(l.status==='planned')return `<span class="pill plan">${l.pay.mode==='ticket'?L('予定・回数券','Scheduled · pack'):l.pay.mode==='per'&&l.pay.paid?L(`予定・前払い済み ${money(l.pay.amount)}`,`Scheduled · prepaid ${money(l.pay.amount)}`):`${L('予定','Scheduled')} ${money(l.pay.amount)}`}</span>`;
   if(l.pay.mode==='ticket'){const p=S.packages.find(x=>x.id===l.pay.pid);return `<span class="pill ticket">${L('回数券','Pack')} ${ticketNo(l)}/${p?p.count:'?'}</span>`}
   if(l.pay.mode==='per')return l.pay.paid?`<span class="pill paid">${L('支払い済み','Paid')}</span>`:`<span class="pill due">${L('未払い','Unpaid')} ${money(l.pay.amount)}</span>`;
   return '';
@@ -556,7 +595,7 @@ function lessonRow(l,showDate=true,onlySid=null){
   return `<button class="row" data-act="openLesson" data-id="${l.id}">
     <div class="when">${showDate?`<b>${md(l.date)}</b><span>${dow(l.date)} ${l.time}</span>`:`<b>${l.time}</b><span>${l.dur}${L('分',' min')}</span>`}</div>
     <div class="what"><div class="nm" style="${l.status==='cancelled'?'color:var(--muted)':''}"><i class="dot" style="background:${s.color}"></i>${esc(onlySid?s.name:names(grp))}${l.gid?`<span class="type">${L('ペア','Pair')}</span>`:''}</div><div class="sub">${esc(sub)||L('内容はまだ書いていません','No notes yet')}</div></div>
-    <div class="pills">${(pair?grp:[l]).map(x=>pair&&x.status!=='planned'&&x.status!=='cancelled'?payPill(x).replace('">','">'+esc(shortName(stu(x.sid).name))+' '):payPill(x)).filter((v,i,a)=>a.indexOf(v)===i).join('')}</div></button>`;
+    <div class="pills">${pair&&l.status==='planned'&&grp.every(x=>x.pay.mode==='per'&&!x.pay.paid)?`<span class="pill plan">${L('予定','Scheduled')} ${money(grp.reduce((a,x)=>a+ +x.pay.amount,0))}</span>`:(pair?grp:[l]).map(x=>pair&&x.status!=='planned'&&x.status!=='cancelled'?payPill(x).replace('">','">'+esc(shortName(stu(x.sid).name))+' '):payPill(x)).filter((v,i,a)=>a.indexOf(v)===i).join('')}</div></button>`;
 }
 
 /* ホーム */
@@ -567,7 +606,7 @@ function home(){
   const unp=unpaidLessons(), unpP=unpaidPkgs();
   const dueTotal=unp.reduce((a,l)=>a+ +l.pay.amount,0)+unpP.reduce((a,p)=>a+ +p.price,0);
   const monthIn=income().filter(r=>r.date.startsWith(m)).reduce((a,r)=>a+r.amount,0);
-  const monthCount=dedupe(done().filter(l=>l.date.startsWith(m))).length;
+  const PJ=projection(m);
   const low=S.students.map(s=>{const ps=S.packages.filter(p=>p.sid===s.id);if(!ps.length)return null;const rem=ps.reduce((a,p)=>a+Math.max(0,left(p)),0);return rem<=2?{s,rem}:null}).filter(Boolean);
   const pend=S.lessons.filter(l=>l.status==='cancelled'&&l.cancel?.carry==='pending');
   const by={};unp.forEach(l=>{(by[l.sid]=by[l.sid]||{items:[],total:0}).items.push(l);by[l.sid].total+= +l.pay.amount});
@@ -581,7 +620,7 @@ function home(){
   return `${welcome}
   <div class="kpis">
     <div class="kpi"><span>${L('今月の受け取り','Received this month')}</span><b>${money(monthIn)}</b></div>
-    <div class="kpi"><span>${L('今月のレッスン','Lessons this month')}</span><b>${monthCount}</b></div>
+    <div class="kpi proj link" data-act="goMoney" role="button" tabindex="0"><span>${L('今月の見込み','Expected this month')} ›</span><b>${money(PJ.total)}</b></div>
     <div class="kpi due"><span>${L('未払い','Unpaid')}</span><b>${money(dueTotal)}</b></div>
   </div>
   <div class="grid2">
@@ -653,7 +692,13 @@ function layout(items){
 }
 function blk(it){
   const top=it.start*HOUR/60, h=Math.max(20,(it.end-it.start)*HOUR/60-2);
-  return `<button class="blk ${it.cls}" style="top:${top}px;height:${h}px;left:calc(${it.col/it.n*100}% + 1px);width:calc(${100/it.n}% - 3px);${it.c?`--c:${it.c}`:''}" data-act="${it.kind==='lesson'?'openLesson':'openEvent'}" data-id="${it.o.id}">${esc(it.label)}${it.kind==='lesson'&&it.o.gid?L(' (ペア)',' (pair)'):''}<small>${timeRange(it)}</small></button>`;
+  return `<button class="blk ${it.cls}" style="top:${top}px;height:${h}px;left:calc(${it.col/it.n*100}% + 1px);width:calc(${100/it.n}% - 3px);${it.c?`--c:${it.c}`:''}" data-act="${it.kind==='lesson'?'openLesson':'openEvent'}" data-id="${it.o.id}">${esc(it.label)}${it.kind==='lesson'&&it.o.gid?L(' (ペア)',' (pair)'):''}<small>${timeRange(it)}${it.kind==='lesson'?lessonMoneyTag(it.o):''}</small></button>`;
+}
+function lessonMoneyTag(l){
+  if(l.status==='cancelled')return '';
+  const grp=group(l), per=grp.filter(x=>x.pay.mode==='per');
+  if(!per.length)return ' · '+L('回数券','pack');
+  return ' · '+money(per.reduce((a,x)=>a+ +x.pay.amount,0));
 }
 function viewDays(){
   const n={day:1,'3day':3,week:7}[UI.view];
@@ -784,7 +829,10 @@ function moneyView(){
   const [y,m]=UI.month.split('-').map(Number);
   const months=[];for(let i=5;i>=0;i--){const d=new Date(y,m-1-i,1);months.push(`${d.getFullYear()}-${pad(d.getMonth()+1)}`)}
   const sums=months.map(k=>rows.filter(r=>r.date.startsWith(k)).reduce((a,r)=>a+r.amount,0));
-  const max=Math.max(...sums,1);
+  const pjs=months.map(k=>projection(k));
+  const max=Math.max(...pjs.map(p=>p.total),1);
+  const PJ=projection(UI.month), cur=UI.month===today().slice(0,7), future=UI.month>today().slice(0,7);
+  const plist=dedupe(sortL(S.lessons.filter(l=>l.date.startsWith(UI.month)&&(l.status==='planned'||isUnpaid(l)))));
   const mr=rows.filter(r=>r.date.startsWith(UI.month));
   const total=mr.reduce((a,r)=>a+r.amount,0);
   const cnt=dedupe(done().filter(l=>l.date.startsWith(UI.month))).length;
@@ -794,9 +842,18 @@ function moneyView(){
   return `<section class="card" style="margin-bottom:14px">
     <div class="calhead"><button data-act="monMove" data-v="-1" aria-label="${L('前の月','Previous month')}">‹</button><h3>${L(`${y}年${m}月の受け取り`,`Received · ${ymTitle(y,m)}`)}</h3><button data-act="monMove" data-v="1" aria-label="${L('次の月','Next month')}">›</button></div>
     <div class="kpis" style="margin:10px 0 4px"><div class="kpi"><span>${L('受け取り','Received')}</span><b>${money(total)}</b></div><div class="kpi"><span>${L('レッスン','Lessons')}</span><b>${cnt}</b></div><div class="kpi"><span>${L('キャンセル','Cancelled')}</span><b>${canc}</b></div></div>
-    <div class="bars" role="img" aria-label="${L('直近6か月の受け取り','Received over the last 6 months')}">${months.map((k,i)=>`<div class="${k===UI.month?'cur':''}"><em>${sums[i]?money(sums[i]):''}</em><i style="height:${sums[i]/max*100}%"></i></div>`).join('')}</div>
+    <div class="bars" role="img" aria-label="${L('直近6か月の受け取りと見込み','Received and expected over the last 6 months')}">${months.map((k,i)=>{const rest=pjs[i].total-sums[i];return `<div class="${k===UI.month?'cur':''}"><em>${pjs[i].total?money(pjs[i].total):''}</em>${rest>0?`<i class="proj" style="height:${rest/max*100}%"></i>`:''}<i class="got" style="height:${sums[i]/max*100}%"></i></div>`}).join('')}</div>
     <div class="blabels">${months.map(k=>`<span>${mShort(+k.slice(5))}</span>`).join('')}</div>
-    <p class="hint" style="margin:10px 0 0">${L('代金を受け取った日の月に数えます（回数券はまとめて、その月に）。','Counted in the month the money was received (packs count in full that month).')}</p>
+    <div class="legend"><span><i class="m" style="background:var(--accent)"></i>${L('受け取り済み','Received')}</span><span><i class="m" style="background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)"></i>${L('まだの分・これからの予定','Still to come')}</span></div>
+    <p class="hint" style="margin:10px 0 0">${L('受け取りは代金を受け取った日の月に数えます（回数券はまとめて、その月に）。','Received is counted in the month the money came in (packs count in full that month).')}</p>
+  </section>
+  <section class="card projcard" style="margin-bottom:14px"><h2>${L(`${m}月の見込み`,`Expected · ${ymTitle(y,m)}`)} <b>${money(PJ.total)}</b></h2>
+    <div class="line"><span>${L('受け取り済み','Received')}</span><b>${money(PJ.got)}</b></div>
+    <div class="line"><span>${L(`レッスンをしたが未払い`,`Held, not yet paid`)}</span><b>${money(PJ.unpaid)}</b></div>
+    <div class="line"><span>${L(`これからの予定（${PJ.plannedCount}回）`,`Scheduled (${PJ.plannedCount})`)}</span><b>${money(PJ.planned)}</b></div>
+    <div class="line total"><span>${L('見込みの合計','Expected total')}</span><b>${money(PJ.total)}</b></div>
+    ${PJ.plannedPack?`<p class="hint" style="margin:6px 0 0">${L(`回数券で受ける予定が ${PJ.plannedPack}回あります（代金は回数券を買ったときに数えています）。`,`${PJ.plannedPack} scheduled lesson(s) use a pack (counted when the pack was bought).`)}</p>`:''}
+    ${plist.length?`<details style="margin-top:8px" ${cur||future?'open':''}><summary class="hint" style="cursor:pointer">${L('まだの分の内訳','What’s still to come')}</summary>${plist.map(l=>lessonRow(l,true)).join('')}</details>`:''}
   </section>
   <div class="grid2">
     <section class="card"><h2>${L('生徒ごと','By student')}</h2>${Object.keys(by).length?`<table><tr><th>${L('生徒','Student')}</th><th class="r">${L('金額','Amount')}</th></tr>${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([sid,v])=>`<tr><td>${esc(stu(sid).name)}</td><td class="r">${money(v)}</td></tr>`).join('')}</table>`:`<div class="empty">${L('この月の受け取りはありません。','Nothing received this month.')}</div>`}
@@ -844,8 +901,7 @@ function lessonForm(l,preset={}){
     <div class="fld"><span class="lb">${L('生徒','Student')} <span class="hint" style="font-weight:400">— ${L('2人選ぶとペアになります','pick two for a pair lesson')}</span></span><div id="f-pairs">${pairChips('fPair',sids)}</div><div class="chips" id="f-stu">${studentsSorted().map(x=>`<button class="chip" data-act="fStu" data-id="${x.id}" aria-pressed="${sids.includes(x.id)}">${esc(x.name)}</button>`).join('')}</div><div class="hint" id="f-type"></div></div>
     <div id="f-prev"></div>
     <div class="two"><div class="fld"><label for="f-date">${L('日付','Date')}</label><input type="date" id="f-date" value="${base.date}"></div>
-    <div class="fld"><span class="lb">${L('開始','Start')}</span>${timeSel('f-st',base.time)}</div>
-    <div class="fld"><span class="lb">${L('終了','End')}</span>${timeSel('f-en',fromMin(toMin(base.time)+base.dur))}</div></div>
+    <div class="fld"><span class="lb">${L('時間','Time')}</span><div class="trow">${timeSel('f-st',base.time)}<span class="arrow">→</span>${timeSel('f-en',fromMin(toMin(base.time)+base.dur))}</div></div></div>
     ${durChips('f',base.dur)}
     <div class="fld"><label for="f-place">${L('場所','Location')}</label><input id="f-place" maxlength="120" value="${esc(base.place||'')}" placeholder="${L('例：WJA道場','e.g. WJA Dojo')}"></div>
     ${l&&l.seriesId&&base.status==='planned'&&laterInSeries(l).length?scopeHtml('lesson'):''}
@@ -860,11 +916,12 @@ function lessonForm(l,preset={}){
     ${isNew||base.status==='planned'?`<div class="fld"><label class="check"><input type="checkbox" id="f-book"> ${L('次回の予約を入れる','Book the next lesson')}</label>
       <div class="two" id="f-bookbox" hidden><div class="fld"><label for="f-bdate">${L('次回の日付','Next date')}</label><input type="date" id="f-bdate" value="${addDays(base.date,7)}"></div><div class="fld"><span class="lb">${L('時間','Time')}</span>${timeSel('f-bt',base.time)}</div></div><div class="hint" id="f-bookhint" hidden>${L('「次回やること」が、その日の予定に入ります。','“Next time” becomes that lesson’s plan.')}</div></div>`:''}
     <div style="display:grid;gap:10px;margin-top:6px">
-      <button class="btn block" data-act="saveLesson" data-as="done">${base.status==='planned'||isNew?L('記録する（レッスンをした）','Log lesson (it happened)'):L('保存する','Save')}</button>
+
       ${isNew?`<button class="btn block ghost" data-act="saveLesson" data-as="planned">${L('予定として入れる（まだやっていない）','Save as scheduled (not yet held)')}</button>`:''}
       ${base.status==='planned'&&!isNew?`<button class="btn block ghost" data-act="saveLesson" data-as="planned">${L('予定のまま保存する','Save, keep as scheduled')}</button><button class="btn block danger" data-act="cancelOpen" data-id="${l.id}">${L('キャンセルにする','Cancel lesson')}</button>`:''}
       ${!isNew?`<button class="btn block ghost" data-act="delLesson" id="f-del" style="color:var(--due)">${L('このレッスンを消す','Delete this lesson')}</button>`:''}
-    </div>`}`);
+    </div>
+    <div class="foot"><button class="btn block" data-act="saveLesson" data-as="done">${base.status==='planned'||isNew?L('記録する（レッスンをした）','Log lesson (it happened)'):L('保存する','Save')}</button></div>`}`);
   if(!canc)refreshForm();
 }
 function refreshForm(){
@@ -947,12 +1004,11 @@ function saveLesson(as){
 const DURS=[30,45,60,90,120];
 function durChips(P,cur){return `<div class="fld ${P==='e'?'e-times':''}" style="margin-top:-4px"><span class="lb">${L('長さ','Length')}</span><div class="chips" id="${P}-durs">${DURS.map(d=>`<button class="chip" data-act="durPick" data-p="${P}" data-v="${d}" aria-pressed="${d===cur}">${d}${L('分',' min')}</button>`).join('')}</div></div>`}
 function updDurChips(P){const d=durOf(P);document.querySelectorAll(`#${P}-durs .chip`).forEach(x=>x.setAttribute('aria-pressed',+x.dataset.v===d))}
-function timeSel(id,val){
-  const [h,m]=String(val||'16:00').split(':').map(Number), mm=Math.min(55,Math.round((m||0)/5)*5);
-  return `<span class="tsel"><select id="${id}-h" aria-label="${L('時','Hour')}">${[...Array(24)].map((_,i)=>`<option value="${i}" ${i===h?'selected':''}>${i}</option>`).join('')}</select><b>:</b><select id="${id}-m" aria-label="${L('分','Minute')}">${[...Array(12)].map((_,i)=>`<option value="${i*5}" ${i*5===mm?'selected':''}>${pad(i*5)}</option>`).join('')}</select></span>`;
-}
-const readT=id=>`${pad(g(id+'-h').value)}:${pad(g(id+'-m').value)}`;
-function setT(id,t){const [h,m]=t.split(':').map(Number);g(id+'-h').value=h;g(id+'-m').value=Math.min(55,Math.round(m/5)*5)}
+const r5=t=>fromMin(Math.round(toMin(t||'16:00')/5)*5);
+const TIMES=[...Array(288)].map((_,i)=>fromMin(i*5));
+function timeSel(id,val){const v=r5(val);return `<select id="${id}" class="tsel1" aria-label="${L('時刻','Time')}">${TIMES.map(t=>`<option ${t===v?'selected':''}>${t}</option>`).join('')}</select>`}
+const readT=id=>g(id).value;
+function setT(id,t){g(id).value=r5(t)}
 const durOf=P=>toMin(readT(P+'-en'))-toMin(readT(P+'-st'));
 function repeatDates(start,rule,mode,count,until){
   if(rule==='none')return [start];
@@ -974,47 +1030,58 @@ function laterInSeries(x){return x&&x.seriesId?S.lessons.concat(S.events).filter
 function scopeHtml(what){const ev=what==='event';return `<div class="fld"><span class="lb">${L(`繰り返しの${ev?'予定':'レッスン'}`,`Repeating ${ev?'event':'lesson'}`)}</span><div class="radio"><label><input type="radio" name="scope" value="one" checked> ${L('この予定だけ','This one only')}</label><label><input type="radio" name="scope" value="after"> ${L('これ以降の予定すべて','This and all following')}<small>${L(`時刻・長さ・場所${ev?'・タイトル・種類・メモ':''}をまとめて変えます。消すときも、これ以降をまとめて消します`,`Changes time, length, location${ev?', title, type and notes':''} for all of them. Deleting also removes all following.`)}</small></label></div></div>`}
 
 /* 予定を追加（プライベートレッスン／柔道の予定） */
+function recentPlaces(){
+  const c={};[...S.lessons,...S.events].forEach(x=>{if(x.place)c[x.place]=(c[x.place]||0)+1});
+  return Object.entries(c).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+}
+function lastTimeOf(sid){const l=sortL(S.lessons.filter(x=>x.sid===sid&&x.status!=='cancelled')).pop();return l?l.time:null}
 function eventForm(o={}){
   const ev=o.ev;
   const tab=ev?'event':(o.kind||(UI.tab==='cal'&&UI.filter==='event'?'event':UI.tab==='home'&&UI.hfilter==='event'?'event':'lesson'));
   const pr=o.pair?S.pairs.find(p=>p.id===o.pair):null;
   const sid0=pr?null:(o.sid||(UI.tab==='stu'&&UI.sid)||null);
-  const date=ev?.date||o.date||today(), time=ev?.time||o.time||'16:00';
+  const date=ev?.date||o.date||today();
+  const firstSid=pr?pairMembers(pr)[0].id:sid0;
+  const time=ev?.time||o.time||(firstSid&&lastTimeOf(firstSid))||'16:00';
   F.tdur=ev?(ev.dur||60):(sid0?stu(sid0).dur:60);
-  if(pr)F.tdur=60;
-  F.e={tab,ev,sids:pr?pairMembers(pr).map(s=>s.id):sid0?[sid0]:[],type:ev?.type||'practice',carry:o.carry||null,useCarry:true};
+  F.e={tab,ev,sids:pr?pairMembers(pr).map(s=>s.id):sid0?[sid0]:[],type:ev?.type||'practice',carry:o.carry||null,useCarry:true,timeFixed:!!(ev||o.time)};
   F.confirmDelE=false;
   const later=ev?laterInSeries(ev):[];
+  const places=recentPlaces();
+  const RP=[['none',L('しない','None')],['weekly',L('毎週','Weekly')],['biweekly',L('隔週','Every 2 wks')],['monthly',L('毎月','Monthly')],['daily',L('毎日','Daily')]];
   openSheet(ev?L('柔道の予定を編集','Edit judo event'):L('予定を追加','Add event'),`
     ${ev?'':`<div class="tabs2"><button data-act="eTab" data-v="lesson" aria-pressed="${tab==='lesson'}">${L('プライベートレッスン','Private lesson')}</button><button data-act="eTab" data-v="event" aria-pressed="${tab==='event'}">${L('柔道の予定','Judo event')}</button></div>`}
     <div class="only-lesson">
-      <div class="fld"><span class="lb">${L('生徒','Student')} <span class="hint" style="font-weight:400">— ${L('2人選ぶとペア','pick two for a pair')}</span></span><div id="e-pairs">${pairChips('ePair',F.e.sids)}</div><div class="chips">${studentsSorted().map(x=>`<button class="chip" data-act="eStu" data-id="${x.id}" aria-pressed="${F.e.sids.includes(x.id)}">${esc(x.name)}</button>`).join('')||`<span class="hint">${L('先に「生徒」タブで生徒を追加してください。','Add a student in the Students tab first.')}</span>`}</div></div>
+      <div class="fld"><span class="lb">${L('だれと','Who')}</span><div id="e-pairs">${pairChips('ePair',F.e.sids)}</div><div class="chips">${studentsSorted().map(x=>`<button class="chip" data-act="eStu" data-id="${x.id}" aria-pressed="${F.e.sids.includes(x.id)}">${esc(x.name)}</button>`).join('')||`<span class="hint">${L('先に「生徒」タブで生徒を追加してください。','Add a student in the Students tab first.')}</span>`}</div></div>
       <div id="e-carry"></div>
     </div>
     <div class="only-event">
-      <div class="fld"><input class="ttl" id="e-title" maxlength="120" placeholder="${L('タイトルを追加','Add title')}" value="${esc(ev?.title||'')}" aria-label="${L('タイトル','Title')}"></div>
-      <div class="fld"><span class="lb">${L('種類','Type')}</span><div class="chips">${EVT.map(([k,,,c])=>`<button class="chip typechip" style="--c:var(${c})" data-act="eType" data-v="${k}" aria-pressed="${F.e.type===k}">${evtName(k)}</button>`).join('')}</div></div>
-      <div class="fld"><label class="check"><input type="checkbox" id="e-allday" ${ev?.allDay?'checked':''}> ${L('終日','All day')}</label></div>
+      <div class="fld"><input class="ttl" id="e-title" maxlength="120" placeholder="${L('タイトル（例：チーム練習）','Title (e.g. Team practice)')}" value="${esc(ev?.title||'')}" aria-label="${L('タイトル','Title')}"></div>
+      <div class="fld"><div class="chips">${EVT.map(([k,,,c])=>`<button class="chip typechip" style="--c:var(${c})" data-act="eType" data-v="${k}" aria-pressed="${F.e.type===k}">${evtName(k)}</button>`).join('')}</div></div>
     </div>
-    <div class="two">
-      <div class="fld"><label for="e-date">${L('日付','Date')}</label><input type="date" id="e-date" value="${date}"></div>
-      <div class="fld" id="e-edbox"><label for="e-edate">${L('終了日（何日か続くとき）','End date (multi-day)')}</label><input type="date" id="e-edate" value="${ev?.edate||''}"></div>
-      <div class="fld e-times"><span class="lb">${L('開始','Start')}</span>${timeSel('e-st',time)}</div>
-      <div class="fld e-times"><span class="lb">${L('終了','End')}</span>${timeSel('e-en',fromMin(toMin(time)+F.tdur))}</div>
+    <div class="whenbox">
+      <div class="drow"><span class="lb" style="width:100%">${L('いつ','When')}</span>
+        <button class="chip" data-act="eDate" data-v="0">${L('今日','Today')}</button><button class="chip" data-act="eDate" data-v="1">${L('明日','Tomorrow')}</button><button class="chip" data-act="eDate" data-v="7">${L('1週間後','In a week')}</button>
+        <input type="date" id="e-date" value="${date}" aria-label="${L('日付','Date')}"></div>
+      <div class="only-event"><label class="check"><input type="checkbox" id="e-allday" ${ev?.allDay?'checked':''}> ${L('終日','All day')}</label></div>
+      <div id="e-edbox" class="drow"><span class="lb">${L('終わりの日（何日か続くとき）','Last day (multi-day)')}</span><input type="date" id="e-edate" value="${ev?.edate||''}"></div>
+      <div class="trow e-times">${timeSel('e-st',time)}<span class="arrow">→</span>${timeSel('e-en',fromMin(toMin(time)+F.tdur))}<span class="dlabel" id="e-dlabel"></span></div>
+      <div class="chips e-times" id="e-durs">${DURS.map(d=>`<button class="chip" data-act="durPick" data-p="e" data-v="${d}" aria-pressed="${d===F.tdur}">${d}${L('分',' min')}</button>`).join('')}</div>
+      ${ev?(later.length?scopeHtml('event'):''):`<div><span class="lb">${L('繰り返し','Repeat')}</span><div class="chips" style="margin-top:6px">${RP.map(([k,n])=>`<button class="chip" data-act="rpPick" data-v="${k}" aria-pressed="${k==='none'}">${n}</button>`).join('')}</div>
+        <select id="rp" hidden>${RP.map(([k])=>`<option value="${k}">${k}</option>`).join('')}</select>
+        <div id="rp-end" hidden style="margin-top:8px"><div class="drow"><select id="rp-mode" style="width:auto"><option value="count">${L('回数で終わる','Ends after')}</option><option value="until">${L('日付で終わる','Ends on')}</option></select>
+          <span class="stepper" id="rp-cbox"><button data-act="rpStep" data-v="-1" aria-label="${L('減らす','Fewer')}">−</button><input type="number" id="rp-count" inputmode="numeric" min="2" max="150" value="10" aria-label="${L('回数','Times')}"><button data-act="rpStep" data-v="1" aria-label="${L('増やす','More')}">＋</button><span>${L('回','times')}</span></span>
+          <span id="rp-ubox" hidden><input type="date" id="rp-until" value="${addDays(date,90)}" aria-label="${L('この日まで','Until')}"></span></div>
+        <div class="hint" id="rp-sum" style="margin-top:6px"></div></div></div>`}
     </div>
-    ${durChips('e',F.tdur)}
-    ${ev?(later.length?scopeHtml('event'):''):`<div class="fld"><label for="rp">${L('繰り返し','Repeat')}</label><select id="rp">${['none','weekly','biweekly','monthly','daily'].map(r=>`<option value="${r}">${repeatLabel(r,date)}</option>`).join('')}</select>
-      <div class="two" id="rp-end" hidden><div class="fld" style="margin:0"><label for="rp-mode">${L('終わり','Ends')}</label><select id="rp-mode"><option value="count">${L('回数で終わる','After a number of times')}</option><option value="until">${L('日付で終わる','On a date')}</option></select></div>
-      <div class="fld" style="margin:0" id="rp-cbox"><label for="rp-count">${L('回数','Times')}</label><input type="number" id="rp-count" inputmode="numeric" min="2" max="150" value="10"></div>
-      <div class="fld" style="margin:0" id="rp-ubox" hidden><label for="rp-until">${L('この日まで','Until')}</label><input type="date" id="rp-until" value="${addDays(date,90)}"></div></div>
-      <div class="hint" id="rp-sum"></div></div>`}
-    <div class="fld"><label for="e-place">${L('場所','Location')}</label><input id="e-place" maxlength="120" value="${esc(ev?.place||'')}" placeholder="${L('例：WJA道場','e.g. WJA Dojo')}"></div>
-    <div class="fld only-lesson"><label for="e-plan">${L('この日にやる予定','Plan for this lesson')}</label><textarea id="e-plan" maxlength="2000" style="min-height:60px" placeholder="${L('例：大外刈の連絡技（繰り返しのときは初回に入ります）','e.g. Osoto-gari combinations (for repeats, goes on the first one)')}"></textarea><div class="hint" id="e-price"></div></div>
-    <div class="fld only-event"><label for="e-memo">${L('メモ','Notes')}</label><textarea id="e-memo" maxlength="2000" style="min-height:60px" placeholder="${L('持ち物・集合時間・出る生徒など','What to bring, meeting time, who’s going…')}">${esc(ev?.memo||'')}</textarea></div>
-    <div style="display:grid;gap:10px;margin-top:6px">
-      <button class="btn block" data-act="saveEvent">${L('保存する','Save')}</button>
-      ${ev?`<button class="btn block ghost" data-act="delEvent" style="color:var(--due)">${L('この予定を消す','Delete this event')}</button>`:''}
-    </div>`);
+    <div class="fld"><label for="e-place">${L('場所','Location')}</label><input id="e-place" list="e-places" maxlength="120" value="${esc(ev?.place||'')}" placeholder="${L('例：WJA道場','e.g. WJA Dojo')}">
+      <datalist id="e-places">${places.map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+      ${places.length?`<div class="chips">${places.slice(0,4).map(p=>`<button class="chip" data-act="ePlace" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>`:''}</div>
+    <div class="only-lesson"><div class="pricebar" id="e-price" hidden></div></div>
+    <div class="fld only-lesson"><label for="e-plan">${L('この日にやる予定（なくても大丈夫）','Plan (optional)')}</label><textarea id="e-plan" maxlength="2000" style="min-height:56px" placeholder="${L('例：大外刈の連絡技','e.g. Osoto-gari combinations')}"></textarea></div>
+    <div class="fld only-event"><label for="e-memo">${L('メモ','Notes')}</label><textarea id="e-memo" maxlength="2000" style="min-height:56px" placeholder="${L('持ち物・集合時間・出る生徒など','What to bring, meeting time, who’s going…')}">${esc(ev?.memo||'')}</textarea></div>
+    ${ev?`<button class="btn block ghost" data-act="delEvent" style="color:var(--due)">${L('この予定を消す','Delete this event')}</button>`:''}
+    <div class="foot"><button class="btn block" data-act="saveEvent" id="e-save">${L('保存する','Save')}</button></div>`);
   refreshEv();
 }
 function refreshEv(){
@@ -1025,19 +1092,22 @@ function refreshEv(){
   document.querySelectorAll('.e-times').forEach(x=>x.hidden=allDay);
   g('e-edbox').hidden=!allDay;
   const date=g('e-date').value||today();
+  const d0=durOf('e');g('e-dlabel').textContent=d0>0?`${d0}${L('分',' min')}`:L('終了が開始より前です','End is before start');g('e-dlabel').style.color=d0>0?'':'var(--due)';
   if(g('rp')){
-    [...g('rp').options].forEach(op=>op.textContent=repeatLabel(op.value,date));
     const r=g('rp').value;g('rp-end').hidden=r==='none';
     const mode=g('rp-mode').value;g('rp-cbox').hidden=mode!=='count';g('rp-ubox').hidden=mode!=='until';
     const n=repeatDates(date,r,mode,+g('rp-count').value||1,g('rp-until').value).length;
     g('rp-sum').textContent=r==='none'?'':L(`${repeatLabel(r,date)}・${n}回分の予定ができます`,`${repeatLabel(r,date)} · creates ${n} events`);
+    E.nRep=r==='none'?1:n;
   }
+  g('e-save').textContent=(E.nRep||1)>1?L(`${E.nRep}回分を保存する`,`Save ${E.nRep} events`):L('保存する','Save');
   if(isL){
     const n=E.sids.length, d=durOf('e');
     const pkLeft=n===1?activePkg(E.sids[0]).reduce((a,p)=>a+left(p),0):0;
-    g('e-price').textContent=!n?'':n>=2?L(`ペア ${d}分：1人 ${money(priceFor(E.sids[0],d,2))}（2人で ${money(priceFor(E.sids[0],d,2)*2)}）・支払いは記録のときに`,`Pair, ${d} min: ${money(priceFor(E.sids[0],d,2))} each (${money(priceFor(E.sids[0],d,2)*2)} total) · payment is set when you log it`)
-      :pkLeft?L(`回数券で入ります（残り ${pkLeft}回）・回数券はレッスンをした日に減ります`,`Uses the lesson pack (${pkLeft} left) · one is used on the day of the lesson`)
-      :L(`マンツーマン ${d}分：${money(priceFor(E.sids[0],d,1))}・支払いは記録のときに`,`Private, ${d} min: ${money(priceFor(E.sids[0],d,1))} · payment is set when you log it`);
+    const pb=g('e-price');pb.hidden=!n||d<=0;
+    const each=n>=2?priceFor(E.sids[0],d,2):priceFor(E.sids[0],d,1), one=n>=2?each*2:each, reps=E.nRep||1;
+    if(n)pb.innerHTML=pkLeft?`<span>${L(`回数券で受けます（残り ${pkLeft}回）`,`Uses the pack (${pkLeft} left)`)}<small>${L('代金は回数券を買ったときに受け取り済み','Already paid when the pack was bought')}</small></span><b>${L('回数券','Pack')}</b>`
+      :`<span>${n>=2?L(`ペア ${d}分（1人 ${money(each)}）`,`Pair, ${d} min (${money(each)} each)`):L(`マンツーマン ${d}分`,`Private, ${d} min`)}<small>${reps>1?L(`${reps}回分で ${money(one*reps)}`,`${reps} lessons = ${money(one*reps)}`):L('支払いはレッスンの記録のときに','Payment is recorded when you log the lesson')}</small></span><b>${money(one)}</b>`;
     const c=E.sids.map(sid=>E.carry&&byId(E.carry)?.sid===sid?byId(E.carry):pendingOf(sid)[0]).find(Boolean);
     g('e-carry').innerHTML=c?`<div class="paybox" style="margin-bottom:14px"><label class="check"><input type="checkbox" id="e-usecarry" ${E.useCarry?'checked':''}> ${esc(stu(c.sid).name)}: ${L(`${md(c.date)} にキャンセルした分の振替にする`,`make-up for ${md(c.date)}`)}</label><div class="hint">${L(`やる予定だった内容${c.pay.mode==='per'&&c.pay.paid?'と前払いの代金':''}を引き継ぎます${c.pay.mode==='ticket'?'（回数券は減っていません）':''}。`,`Carries over the plan${c.pay.mode==='per'&&c.pay.paid?' and the prepayment':''}${c.pay.mode==='ticket'?' (the pack was not used)':''}.`)}</div></div>`:'';
     E.carryObj=c||null;
@@ -1261,7 +1331,12 @@ document.addEventListener('click',e=>{
     case 'newEvent':eventForm({date:b.dataset.date,sid:b.dataset.sid,kind:b.dataset.kind,pair:b.dataset.pair});break;
     case 'openEvent':eventForm({ev:S.events.find(x=>x.id===id)});break;
     case 'eTab':F.e.tab=v;document.querySelectorAll('[data-act="eTab"]').forEach(x=>x.setAttribute('aria-pressed',x===b));refreshEv();break;
+    case 'eDate':g('e-date').value=addDays(today(),+v);refreshEv();break;
+    case 'rpPick':g('rp').value=v;document.querySelectorAll('[data-act="rpPick"]').forEach(x=>x.setAttribute('aria-pressed',x===b));refreshEv();break;
+    case 'rpStep':{const c=g('rp-count');c.value=Math.min(150,Math.max(2,(+c.value||10)+ +v));refreshEv();break}
+    case 'ePlace':g('e-place').value=v;break;
     case 'durPick':{const P=b.dataset.p,d=+v;F.tdur=d;setT(P+'-en',fromMin(toMin(readT(P+'-st'))+d));updDurChips(P);if(P==='f'){recalcAmounts();renderPay()}else refreshEv();break}
+    case 'goMoney':UI.tab='money';UI.month=today().slice(0,7);render();scrollTo(0,0);break;
     case 'newPair':pairForm(null,b.dataset.sid);break;
     case 'editPair':pairForm(S.pairs.find(p=>p.id===id));break;
     case 'prPick':{const on=!F.pair.sel.includes(id);
@@ -1286,7 +1361,7 @@ document.addEventListener('click',e=>{
     case 'eStu':{const on=!F.e.sids.includes(id);if(on&&F.e.sids.length>=2){toast(L('ペアは2人までです','A pair is two students'),L('先にどちらかを外してください','Deselect one first'));return}
       F.e.sids=on?[...F.e.sids,id]:F.e.sids.filter(x=>x!==id);b.setAttribute('aria-pressed',on);
       document.querySelectorAll('[data-act="ePair"]').forEach(x=>x.setAttribute('aria-pressed',samePair(S.pairs.find(q=>q.id===x.dataset.id),F.e.sids)));
-      if(on&&F.e.sids.length===1){F.tdur=stu(id).dur;setT('e-en',fromMin(toMin(readT('e-st'))+F.tdur));updDurChips('e')}
+      if(on&&F.e.sids.length===1){F.tdur=stu(id).dur;const lt=lastTimeOf(id);if(lt&&!F.e.timeFixed)setT('e-st',lt);setT('e-en',fromMin(toMin(readT('e-st'))+F.tdur));updDurChips('e')}
       refreshEv();break}
     case 'eType':{const old=evtName(F.e.type);F.e.type=v;document.querySelectorAll('[data-act="eType"]').forEach(x=>x.setAttribute('aria-pressed',x===b));
       const t=g('e-title');if(!t.value.trim()||t.value===old)t.value=evtName(v);break}
@@ -1384,12 +1459,13 @@ document.addEventListener('change',e=>{
   if(id==='f-book'){g('f-bookbox').hidden=!e.target.checked;g('f-bookhint').hidden=!e.target.checked}
   if(id==='k-paid')g('k-mbox').hidden=!e.target.checked;
   if(id==='f-date'&&g('f-bdate'))g('f-bdate').value=addDays(e.target.value,7);
-  const tm=id.match(/^(f|e)-(st|en)-[hm]$/);
+  const tm=id.match(/^(f|e)-(st|en)$/);
   if(tm){const P=tm[1];
     if(tm[2]==='st')setT(P+'-en',fromMin(toMin(readT(P+'-st'))+F.tdur));else F.tdur=durOf(P);
     updDurChips(P);
     if(P==='f'){recalcAmounts();renderPay()}else refreshEv()}
   if(id==='e-date'||id==='e-allday'||id==='rp'||id==='rp-mode'||id==='rp-count'||id==='rp-until')refreshEv();
+  if(id==='e-st'&&F.e)F.e.timeFixed=true;
   if(e.target.name==='carry'){g('cx-newbox').hidden=e.target.value!=='new';g('cx-feebox').hidden=e.target.value!=='none'}
   if(e.target.name==='price')g('s-cbox').hidden=e.target.value!=='custom';
   if(id==='st-remind'){S.settings.remind=e.target.value;run(()=>save(),e.target.value==='off'?L('通知を止めました','Notifications turned off'):L(`通知の時刻を ${e.target.value} にしました`,`Notification time set to ${e.target.value}`),e.target.value==='off'?'':L('前の日のこの時刻に、翌日の予定が届きます','Tomorrow’s schedule arrives at this time the night before'))}
