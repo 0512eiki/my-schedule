@@ -703,7 +703,7 @@ function stuList(){
     const hasPkg=S.packages.some(p=>p.sid===s.id);
     const open=(s.todos||[]).filter(t=>!t.done).length, pc=pendingOf(s.id).length;
     return `<button class="row" data-act="openStu" data-id="${s.id}"><div class="avatar" style="background:${s.color}">${esc(s.name[0])}</div>
-      <div class="what"><div class="nm">${esc(s.name)}</div><div class="sub">${rateLabel(s)} ・ ${N(n.length,'回','lesson')} ・ ${L('次','Next')} ${nx?dl(nx.date):L('未定','TBD')}</div>
+      <div class="what"><div class="nm">${esc(s.name)}</div><div class="sub">${L(`いつも${s.dur}分 ${money(priceFor(s.id,s.dur,1))}`,`Usually ${s.dur} min · ${money(priceFor(s.id,s.dur,1))}`)}${s.custom30!=null?L('（個別料金）',' (custom rate)'):''} ・ ${N(n.length,'回','lesson')} ・ ${L('次','Next')} ${nx?dl(nx.date):L('未定','TBD')}</div>
       <div class="meta">${due?`<span class="pill due">${L('未払い','Unpaid')} ${money(due)}</span>`:''}${hasPkg?`<span class="pill ${rem<=2?'warn':'ticket'}">${L(`回数券 残り${rem}`,`Pack: ${rem} left`)}</span>`:''}${pc?`<span class="pill warn">${L(`振替待ち ${pc}`,`Make-up TBD: ${pc}`)}</span>`:''}${open?`<span class="pill off">${L(`次やること ${open}`,`To-do: ${open}`)}</span>`:''}</div></div></button>`}).join('');
   const prs=pairsSorted().map(p=>{
     const [x,y]=pairMembers(p);
@@ -846,6 +846,7 @@ function lessonForm(l,preset={}){
     <div class="two"><div class="fld"><label for="f-date">${L('日付','Date')}</label><input type="date" id="f-date" value="${base.date}"></div>
     <div class="fld"><span class="lb">${L('開始','Start')}</span>${timeSel('f-st',base.time)}</div>
     <div class="fld"><span class="lb">${L('終了','End')}</span>${timeSel('f-en',fromMin(toMin(base.time)+base.dur))}</div></div>
+    ${durChips('f',base.dur)}
     <div class="fld"><label for="f-place">${L('場所','Location')}</label><input id="f-place" maxlength="120" value="${esc(base.place||'')}" placeholder="${L('例：WJA道場','e.g. WJA Dojo')}"></div>
     ${l&&l.seriesId&&base.status==='planned'&&laterInSeries(l).length?scopeHtml('lesson'):''}
     <div class="fld"><label for="f-plan">${L('この日にやる予定','Plan for this lesson')}</label><textarea id="f-plan" maxlength="2000" style="min-height:60px" placeholder="${L('予定を入れるときに書いておくと、当日ここに出ます','Write it when scheduling and it shows up here on the day')}">${esc(base.plan)}</textarea></div>
@@ -942,6 +943,10 @@ function saveLesson(as){
 }
 
 /* 時刻（5分おき）・繰り返し */
+
+const DURS=[30,45,60,90,120];
+function durChips(P,cur){return `<div class="fld ${P==='e'?'e-times':''}" style="margin-top:-4px"><span class="lb">${L('長さ','Length')}</span><div class="chips" id="${P}-durs">${DURS.map(d=>`<button class="chip" data-act="durPick" data-p="${P}" data-v="${d}" aria-pressed="${d===cur}">${d}${L('分',' min')}</button>`).join('')}</div></div>`}
+function updDurChips(P){const d=durOf(P);document.querySelectorAll(`#${P}-durs .chip`).forEach(x=>x.setAttribute('aria-pressed',+x.dataset.v===d))}
 function timeSel(id,val){
   const [h,m]=String(val||'16:00').split(':').map(Number), mm=Math.min(55,Math.round((m||0)/5)*5);
   return `<span class="tsel"><select id="${id}-h" aria-label="${L('時','Hour')}">${[...Array(24)].map((_,i)=>`<option value="${i}" ${i===h?'selected':''}>${i}</option>`).join('')}</select><b>:</b><select id="${id}-m" aria-label="${L('分','Minute')}">${[...Array(12)].map((_,i)=>`<option value="${i*5}" ${i*5===mm?'selected':''}>${pad(i*5)}</option>`).join('')}</select></span>`;
@@ -997,6 +1002,7 @@ function eventForm(o={}){
       <div class="fld e-times"><span class="lb">${L('開始','Start')}</span>${timeSel('e-st',time)}</div>
       <div class="fld e-times"><span class="lb">${L('終了','End')}</span>${timeSel('e-en',fromMin(toMin(time)+F.tdur))}</div>
     </div>
+    ${durChips('e',F.tdur)}
     ${ev?(later.length?scopeHtml('event'):''):`<div class="fld"><label for="rp">${L('繰り返し','Repeat')}</label><select id="rp">${['none','weekly','biweekly','monthly','daily'].map(r=>`<option value="${r}">${repeatLabel(r,date)}</option>`).join('')}</select>
       <div class="two" id="rp-end" hidden><div class="fld" style="margin:0"><label for="rp-mode">${L('終わり','Ends')}</label><select id="rp-mode"><option value="count">${L('回数で終わる','After a number of times')}</option><option value="until">${L('日付で終わる','On a date')}</option></select></div>
       <div class="fld" style="margin:0" id="rp-cbox"><label for="rp-count">${L('回数','Times')}</label><input type="number" id="rp-count" inputmode="numeric" min="2" max="150" value="10"></div>
@@ -1146,7 +1152,7 @@ function stuForm(s){
       <label><input type="radio" name="price" value="custom" ${F.custom?'checked':''}> ${L('この生徒だけ別の料金','Custom rate for this student')}</label></div>
       <div class="two" id="s-cbox" ${F.custom?'':'hidden'}><div class="fld" style="margin:0"><label for="s-c30">${L('30分あたり（$）','Per 30 min ($)')}</label><input type="number" id="s-c30" inputmode="decimal" value="${s?.custom30??S.settings.solo30+10}"></div></div>
       <div class="hint">${L('ペアのときは「設定」のペア料金を使います。1回ごとに金額を変えることもできます。','Pair lessons use the pair rate in Settings. You can also change the amount for any single lesson.')}</div></div>
-    <div class="fld"><label for="s-dur">${L('いつもの長さ（分）','Usual length (min)')}</label><input type="number" id="s-dur" inputmode="numeric" step="30" value="${s?.dur??60}"></div>
+    <div class="fld"><label for="s-dur">${L('いつもの長さ（分）','Usual length (min)')}</label><select id="s-dur">${[...new Set([...DURS,s?.dur??60])].sort((a,b)=>a-b).map(d=>`<option value="${d}" ${d===(s?.dur??60)?'selected':''}>${d}${L('分',' min')}</option>`).join('')}</select></div>
     <div class="fld"><label for="s-memo">${L('メモ（年齢・目標・連絡先など）','Notes (age, goals, contact…)')}</label><textarea id="s-memo" maxlength="2000">${esc(s?.memo||'')}</textarea></div>
     <button class="btn block" data-act="saveStu" data-id="${s?.id||''}">${L('保存する','Save')}</button>`);
 }
@@ -1161,7 +1167,7 @@ function settingsForm(){
     <div class="fld"><span class="lb">${L('料金','Rates')}</span></div>
     <div class="two"><div class="fld"><label for="st-solo">${L('マンツーマン：30分あたり（$）','Private: per 30 min ($)')}</label><input type="number" id="st-solo" inputmode="decimal" value="${S.settings.solo30}"></div>
     <div class="fld"><label for="st-pair">${L('ペア：1時間あたり・2人の合計（$）','Pair: per hour, both students total ($)')}</label><input type="number" id="st-pair" inputmode="decimal" value="${S.settings.pair60}"></div></div>
-    <div class="prev"><b>${L('いまの設定での例','Example with these rates')}</b>${L(`マンツーマン 60分 ＝ ${money(S.settings.solo30*2)}<br>ペア 60分 ＝ ${money(S.settings.pair60)}（1人 ${money(S.settings.pair60/2)}）`,`Private 60 min = ${money(S.settings.solo30*2)}<br>Pair 60 min = ${money(S.settings.pair60)} (${money(S.settings.pair60/2)} each)`)}</div>
+    <div class="prev"><b>${L('いまの設定での例','Example with these rates')}</b>${L(`マンツーマン 45分 ＝ ${money(S.settings.solo30*1.5)}／60分 ＝ ${money(S.settings.solo30*2)}<br>ペア 60分 ＝ ${money(S.settings.pair60)}（1人 ${money(S.settings.pair60/2)}）`,`Private 45 min = ${money(S.settings.solo30*1.5)} / 60 min = ${money(S.settings.solo30*2)}<br>Pair 60 min = ${money(S.settings.pair60)} (${money(S.settings.pair60/2)} each)`)}</div>
     <p class="hint">${L('「別の料金」にしている生徒はそちらが優先されます。変更はこれから入れるレッスンに使われ、記録済みの金額は変わりません。','Students with a custom rate keep their own rate. Changes apply to new lessons; logged amounts stay the same.')}</p>
     <button class="btn block" data-act="saveSettings">${L('料金を保存する','Save rates')}</button>
     <div class="fld" style="margin-top:22px"><span class="lb">${L('アカウント','Account')}</span><div class="chips" style="align-items:center"><span>${L('ログイン中：','Signed in as ')}<b>${esc(SESSION?.login||'')}</b></span><button class="btn sm ghost" data-act="logout">${L('ログアウト','Sign out')}</button></div></div>`);
@@ -1255,6 +1261,7 @@ document.addEventListener('click',e=>{
     case 'newEvent':eventForm({date:b.dataset.date,sid:b.dataset.sid,kind:b.dataset.kind,pair:b.dataset.pair});break;
     case 'openEvent':eventForm({ev:S.events.find(x=>x.id===id)});break;
     case 'eTab':F.e.tab=v;document.querySelectorAll('[data-act="eTab"]').forEach(x=>x.setAttribute('aria-pressed',x===b));refreshEv();break;
+    case 'durPick':{const P=b.dataset.p,d=+v;F.tdur=d;setT(P+'-en',fromMin(toMin(readT(P+'-st'))+d));updDurChips(P);if(P==='f'){recalcAmounts();renderPay()}else refreshEv();break}
     case 'newPair':pairForm(null,b.dataset.sid);break;
     case 'editPair':pairForm(S.pairs.find(p=>p.id===id));break;
     case 'prPick':{const on=!F.pair.sel.includes(id);
@@ -1279,7 +1286,7 @@ document.addEventListener('click',e=>{
     case 'eStu':{const on=!F.e.sids.includes(id);if(on&&F.e.sids.length>=2){toast(L('ペアは2人までです','A pair is two students'),L('先にどちらかを外してください','Deselect one first'));return}
       F.e.sids=on?[...F.e.sids,id]:F.e.sids.filter(x=>x!==id);b.setAttribute('aria-pressed',on);
       document.querySelectorAll('[data-act="ePair"]').forEach(x=>x.setAttribute('aria-pressed',samePair(S.pairs.find(q=>q.id===x.dataset.id),F.e.sids)));
-      if(on&&F.e.sids.length===1){F.tdur=stu(id).dur;setT('e-en',fromMin(toMin(readT('e-st'))+F.tdur))}
+      if(on&&F.e.sids.length===1){F.tdur=stu(id).dur;setT('e-en',fromMin(toMin(readT('e-st'))+F.tdur));updDurChips('e')}
       refreshEv();break}
     case 'eType':{const old=evtName(F.e.type);F.e.type=v;document.querySelectorAll('[data-act="eType"]').forEach(x=>x.setAttribute('aria-pressed',x===b));
       const t=g('e-title');if(!t.value.trim()||t.value===old)t.value=evtName(v);break}
@@ -1380,6 +1387,7 @@ document.addEventListener('change',e=>{
   const tm=id.match(/^(f|e)-(st|en)-[hm]$/);
   if(tm){const P=tm[1];
     if(tm[2]==='st')setT(P+'-en',fromMin(toMin(readT(P+'-st'))+F.tdur));else F.tdur=durOf(P);
+    updDurChips(P);
     if(P==='f'){recalcAmounts();renderPay()}else refreshEv()}
   if(id==='e-date'||id==='e-allday'||id==='rp'||id==='rp-mode'||id==='rp-count'||id==='rp-until')refreshEv();
   if(e.target.name==='carry'){g('cx-newbox').hidden=e.target.value!=='new';g('cx-feebox').hidden=e.target.value!=='none'}
