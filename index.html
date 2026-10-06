@@ -977,7 +977,9 @@ function saveLesson(as,scope){
   const place=g('f-place').value.trim();
   const first=byId(Object.values(F.ids)[0]);
   const later=first?laterLessons(Object.values(F.ids)):[];
-  const changed=first&&(first.date!==date||first.time!==time||first.dur!==dur||(first.place||'')!==place);
+  const amtChanged=F.sids.filter(sid=>{const o=byId(F.ids[sid]);return o&&o.pay.mode==='per'&&F.pay[sid].mode!=='ticket'&&+o.pay.amount!==+F.pay[sid].amount});
+  const durChanged=first&&first.dur!==dur;
+  const changed=first&&(first.date!==date||first.time!==time||durChanged||(first.place||'')!==place||amtChanged.length);
   if(scope===undefined&&later.length&&changed){askScope('save',later.length,sc=>saveLesson(as,sc));return}
   const shift=first?dayDiff(first.date,date):0;
   const gid=F.sids.length>1?(F.gid||uid()):null;
@@ -995,7 +997,8 @@ function saveLesson(as,scope){
     saved.push(rec);
     if(status==='done')(stu(sid).todos||[]).forEach(t=>{if(F.todo.has(t.id)){t.done=true;t.doneOn=date}});
   });
-  if(scope==='after')later.flatMap(group).forEach(x=>{if(x.status!=='planned')return;x.date=addDays(x.date,shift);x.time=time;x.dur=dur;x.place=place;if(x.pay.mode==='per'&&!x.pay.paid)x.pay.amount=priceFor(x.sid,dur,group(x).length)});
+  if(scope==='after')later.flatMap(group).forEach(x=>{if(x.status!=='planned')return;x.date=addDays(x.date,shift);x.time=time;x.dur=dur;x.place=place;
+    if(x.pay.mode==='per'&&!x.pay.paid){if(amtChanged.includes(x.sid))x.pay.amount=+F.pay[x.sid].amount;else if(durChanged)x.pay.amount=priceFor(x.sid,dur,group(x).length)}});
   let booked='';
   if(g('f-book')?.checked&&g('f-bdate').value){
     const bd=g('f-bdate').value, bg=F.sids.length>1?uid():null;
