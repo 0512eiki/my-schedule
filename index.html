@@ -235,6 +235,7 @@ td.r,th.r{text-align:right;font-family:var(--f-num)}
 .ttl{font-size:20px;font-weight:700;border:0;border-bottom:2px solid var(--line);border-radius:0;padding:8px 2px;background:transparent}
 .ttl:focus{border-bottom-color:var(--accent);outline:none}
 .typechip{--c:var(--t-other)}
+.pairchip{border-style:dashed;border-width:1.5px;font-weight:700}
 .typechip[aria-pressed="true"]{background:var(--c);border-color:var(--c);color:var(--card)}
 @media (min-width:900px){
   nav.side{display:flex;flex-direction:column;gap:4px;width:210px;flex:none;padding:22px 14px;border-right:1px solid var(--line);position:sticky;top:0;height:100vh}
@@ -312,6 +313,20 @@ function priceFor(sid,dur,n){
 
 const stu=id=>S.students.find(s=>s.id===id)||{id,name:L('（削除された生徒）','(deleted student)'),color:'#888',custom30:null,dur:60,todos:[]};
 const byId=id=>S.lessons.find(l=>l.id===id);
+/* 名前順・ペア */
+const sortKey=x=>(x.kana||x.name||'');
+const byName=(a,b)=>sortKey(a).localeCompare(sortKey(b),LANGV==='en'?'en':'ja',{numeric:true,sensitivity:'base'});
+const studentsSorted=()=>[...S.students].sort(byName);
+const hasStu=id=>S.students.some(s=>s.id===id);
+const pairMembers=p=>[stu(p.a),stu(p.b)].sort(byName);
+const pairName=p=>pairMembers(p).map(s=>s.name).join(L('・',' & '));
+const pairsSorted=()=>S.pairs.filter(p=>hasStu(p.a)&&hasStu(p.b)).sort((x,y)=>pairName(x).localeCompare(pairName(y),LANGV==='en'?'en':'ja'));
+const pairsOf=sid=>pairsSorted().filter(p=>p.a===sid||p.b===sid);
+const samePair=(p,ids)=>ids.length===2&&ids.includes(p.a)&&ids.includes(p.b);
+function pairChips(act,sel){
+  const ps=pairsSorted();if(!ps.length)return '';
+  return `<div class="hint" style="margin-top:2px">${L('ペアから選ぶ','Pick a pair')}</div><div class="chips" style="margin-bottom:4px">${ps.map(p=>`<button class="chip pairchip" data-act="${act}" data-id="${p.id}" aria-pressed="${samePair(p,sel)}">${esc(pairName(p))}</button>`).join('')}</div><div class="hint">${L('ひとりずつ選ぶ','Or pick students')}</div>`;
+}
 const done=()=>S.lessons.filter(l=>l.status==='done');
 const used=pid=>S.lessons.filter(l=>l.status==='done'&&l.pay.mode==='ticket'&&l.pay.pid===pid).length;
 const left=p=>p.count-used(p.id);
@@ -341,9 +356,9 @@ const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSe
 
 const deviceTz=()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Los_Angeles'}catch(e){return 'America/Los_Angeles'}};
 const defaultSettings=()=>({solo30:50,pair60:100,lang:LANGV,remind:'21:00',tz:deviceTz()});
-const emptyState=()=>({settings:defaultSettings(),students:[],packages:[],lessons:[],events:[]});
+const emptyState=()=>({settings:defaultSettings(),students:[],packages:[],lessons:[],events:[],pairs:[]});
 let S=emptyState(), SNAP=new Map(), SESSION=null, LOADED=false, DIRTY=false;
-const KINDS=[['students','student'],['lessons','lesson'],['events','event'],['packages','package']];
+const KINDS=[['students','student'],['lessons','lesson'],['events','event'],['packages','package'],['pairs','pair']];
 function itemsMap(st){
   const m=new Map([['settings|main',JSON.stringify(st.settings)]]);
   KINDS.forEach(([arr,k])=>st[arr].forEach(o=>m.set(`${k}|${o.id}`,JSON.stringify(o))));
@@ -416,7 +431,7 @@ async function enter(user){
   if(!prof||prof.role!=='coach'){await sb.auth.signOut();SESSION=null;UI.loginErr=L('My schedule はコーチだけが使えます。','My schedule is for coaches only.');render();return}
   SESSION={uid:user.id,login:prof.login_id,name:prof.display_name};
   const c=readCache();
-  if(c){S=c.S;SNAP=new Map(c.snap);DIRTY=!!c.dirty;LANGV=S.settings.lang||LANGV;LOADED=true}else{S=emptyState();SNAP=new Map();LOADED=false}
+  if(c){S=c.S;S.pairs=S.pairs||[];SNAP=new Map(c.snap);DIRTY=!!c.dirty;LANGV=S.settings.lang||LANGV;LOADED=true}else{S=emptyState();SNAP=new Map();LOADED=false}
   render();
   await pull();
   refreshPushState();
@@ -680,7 +695,7 @@ function cal(){
 /* 生徒 */
 function rateLabel(s){return s.custom30!=null?L(`30分 ${money(s.custom30)}（個別）`,`${money(s.custom30)} / 30 min (custom)`):L(`30分 ${money(S.settings.solo30)}`,`${money(S.settings.solo30)} / 30 min`)}
 function stuList(){
-  const rows=S.students.map(s=>{
+  const rows=studentsSorted().map(s=>{
     const n=done().filter(l=>l.sid===s.id);
     const nx=sortL(S.lessons.filter(l=>l.sid===s.id&&l.status==='planned'&&l.date>=today()))[0];
     const due=unpaidLessons().filter(l=>l.sid===s.id).reduce((a,l)=>a+ +l.pay.amount,0);
@@ -690,7 +705,25 @@ function stuList(){
     return `<button class="row" data-act="openStu" data-id="${s.id}"><div class="avatar" style="background:${s.color}">${esc(s.name[0])}</div>
       <div class="what"><div class="nm">${esc(s.name)}</div><div class="sub">${rateLabel(s)} ・ ${N(n.length,'回','lesson')} ・ ${L('次','Next')} ${nx?dl(nx.date):L('未定','TBD')}</div>
       <div class="meta">${due?`<span class="pill due">${L('未払い','Unpaid')} ${money(due)}</span>`:''}${hasPkg?`<span class="pill ${rem<=2?'warn':'ticket'}">${L(`回数券 残り${rem}`,`Pack: ${rem} left`)}</span>`:''}${pc?`<span class="pill warn">${L(`振替待ち ${pc}`,`Make-up TBD: ${pc}`)}</span>`:''}${open?`<span class="pill off">${L(`次やること ${open}`,`To-do: ${open}`)}</span>`:''}</div></div></button>`}).join('');
-  return `<section class="card"><h2>${L('生徒','Students')} <button class="btn sm" data-act="newStu">${L('＋ 生徒を追加','＋ Add student')}</button></h2>${rows||`<div class="empty">${L('まだ生徒がいません。「＋ 生徒を追加」から始めましょう。','No students yet. Start with “＋ Add student”.')}</div>`}</section>`;
+  const prs=pairsSorted().map(p=>{
+    const [x,y]=pairMembers(p);
+    const nx=sortL(S.lessons.filter(l=>l.status==='planned'&&l.gid&&l.date>=today()&&l.sid===x.id&&group(l).some(o=>o.sid===y.id)))[0];
+    const cnt=dedupe(done().filter(l=>l.gid&&l.sid===x.id&&group(l).some(o=>o.sid===y.id))).length;
+    return `<div class="row"><div style="display:flex;flex:none"><div class="avatar" style="background:${x.color}">${esc(x.name[0])}</div><div class="avatar" style="background:${y.color};margin-left:-12px;box-shadow:0 0 0 2px var(--card)">${esc(y.name[0])}</div></div>
+      <button class="what" data-act="editPair" data-id="${p.id}" style="border:0;background:none;text-align:left;padding:0"><div class="nm">${esc(pairName(p))}</div><div class="sub">${L(`ペアで ${cnt}回`,`${N(cnt,'','pair lesson')}`)} ・ ${L('次','Next')} ${nx?dl(nx.date):L('未定','TBD')}</div></button>
+      <button class="btn sm ghost" data-act="newEvent" data-pair="${p.id}">${L('予定','Schedule')}</button></div>`}).join('');
+  return `<div class="grid2"><section class="card"><h2>${L('生徒','Students')} <button class="btn sm" data-act="newStu">${L('＋ 生徒を追加','＋ Add student')}</button></h2>${rows||`<div class="empty">${L('まだ生徒がいません。「＋ 生徒を追加」から始めましょう。','No students yet. Start with “＋ Add student”.')}</div>`}</section>
+  <section class="card"><h2>${L('ペア','Pairs')} <button class="btn sm" data-act="newPair" ${S.students.length<2?'disabled':''}>${L('＋ ペアを登録','＋ Add pair')}</button></h2>${prs||`<div class="empty">${S.students.length<2?L('生徒を2人以上登録すると、ペアを作れます。','Add at least two students to make a pair.'):L('よく一緒に受ける2人を登録しておくと、予定を入れるときに1回で選べます。組み合わせはいつでも変えられます。','Register two students who often train together, then pick them in one tap when scheduling. You can change pairs anytime.')}</div>`}</section></div>`;
+}
+function pairForm(p,preset){
+  F.pair={id:p?.id||null,sel:p?[p.a,p.b]:preset?[preset]:[],confirmDel:false};
+  openSheet(p?L('ペアを変更','Edit pair'):L('ペアを登録','Add pair'),`
+    <div class="fld"><span class="lb">${L('2人を選んでください','Pick two students')}</span><div class="chips" id="pr-chips">${studentsSorted().map(x=>`<button class="chip" data-act="prPick" data-id="${x.id}" aria-pressed="${F.pair.sel.includes(x.id)}">${esc(x.name)}</button>`).join('')}</div></div>
+    <p class="hint">${L('組み合わせはいつでも変えられます。これまでのペアレッスンの記録はそのまま残ります。','You can change the pair anytime. Past pair lessons stay as they are.')}</p>
+    <div style="display:grid;gap:10px">
+      <button class="btn block" data-act="savePair">${L('保存する','Save')}</button>
+      ${p?`<button class="btn block ghost" data-act="newEvent" data-pair="${p.id}">${L('このペアで予定を入れる','Schedule this pair')}</button><button class="btn block ghost" data-act="delPair" style="color:var(--due)">${L('このペアを解除する','Remove this pair')}</button>`:''}
+    </div>`);
 }
 function stuDetail(){
   const s=stu(UI.sid);
@@ -709,7 +742,8 @@ function stuDetail(){
   return `<button class="back" data-act="backStu">‹ ${L('生徒一覧','All students')}</button>
   <section class="card" style="margin-bottom:14px"><div class="stu"><div class="avatar" style="background:${s.color};width:52px;height:52px;font-size:20px">${esc(s.name[0])}</div>
     <div class="what"><h3>${esc(s.name)}</h3><div class="sub">${rateLabel(s)} ・ ${L(`いつも${s.dur}分`,`usually ${s.dur} min`)}（${money(priceFor(s.id,s.dur,1))}）</div></div><button class="btn ghost sm" data-act="editStu" data-id="${s.id}">${L('編集','Edit')}</button></div>
-    ${s.memo?`<div class="lognote" style="margin-top:10px">${esc(s.memo)}</div>`:''}</section>
+    ${s.memo?`<div class="lognote" style="margin-top:10px">${esc(s.memo)}</div>`:''}
+    <div class="chips" style="margin-top:10px;align-items:center"><span class="hint">${L('ペア','Pairs')}:</span>${pairsOf(s.id).map(p=>{const o=pairMembers(p).find(x=>x.id!==s.id);return `<button class="chip pairchip" data-act="openStu" data-id="${o.id}">${esc(o.name)}</button>`}).join('')||`<span class="hint">${L('なし','none')}</span>`}<button class="btn sm ghost" data-act="newPair" data-sid="${s.id}">${L('＋ ペアを組む','＋ Pair up')}</button></div></section>
   <div class="kpis"><div class="kpi"><span>${L('レッスン','Lessons')}</span><b>${dn.length}</b></div><div class="kpi"><span>${L('受け取り合計','Total received')}</span><b>${money(paidSum)}</b></div><div class="kpi due"><span>${L('未払い','Unpaid')}</span><b>${money(due)}</b></div></div>
   <div class="grid2">
     <div style="display:grid;gap:14px">
@@ -794,7 +828,7 @@ function lessonForm(l,preset={}){
   if(!S.students.length){toast(L('先に生徒を追加してください','Add a student first'));UI.tab='stu';UI.sid=null;render();return}
   const isNew=!l;
   const grp=l?group(l):[];
-  const sids=l?grp.map(x=>x.sid):[preset.sid||(UI.tab==='stu'&&UI.sid)||S.students[0].id];
+  const sids=l?grp.map(x=>x.sid):[preset.sid||(UI.tab==='stu'&&UI.sid)||studentsSorted()[0].id];
   const base=l||{date:preset.date||today(),time:'16:00',dur:stu(sids[0]).dur,waza:[],content:'',next:'',plan:'',status:'done'};
   F.tdur=base.dur;
   Object.assign(F,{ids:Object.fromEntries(grp.map(x=>[x.sid,x.id])),sids,waza:[...base.waza],status:base.status,isNew,confirmDel:false,pay:{},carry:{},todo:new Set(),gid:l?.gid||null});
@@ -807,7 +841,7 @@ function lessonForm(l,preset={}){
     ${canc?`<div class="prev"><b>${L(`キャンセル（${esc(tReason(l.cancel?.reason||''))}）`,`Cancelled (${esc(tReason(l.cancel?.reason||''))})`)}</b>${l.cancel?.carry==='moved'&&to?L(`振替：${dl(to.date)} に繰り越し済み`,`Moved to the make-up on ${dl(to.date)}`):l.cancel?.carry==='pending'?L('振替の日にちはまだ決まっていません。','Make-up not scheduled yet.'):L('繰り越しなし','Not carried over')}</div>
       <div style="display:grid;gap:10px">${l.cancel?.carry==='pending'?`<button class="btn block" data-act="schedCarry" data-id="${l.id}">${L('振替の日にちを決める','Schedule the make-up')}</button>`:''}<button class="btn block ghost" data-act="uncancel" data-id="${l.id}">${L('キャンセルを取り消す（予定に戻す）','Undo cancel (back to scheduled)')}</button><button class="btn block danger" data-act="delLesson" id="f-del">${L('この記録を消す','Delete this record')}</button></div>`:`
     ${base.status==='planned'&&!isNew?`<div class="prev"><b>${L('予定','Scheduled')}${l.from?L('（振替）',' (make-up)'):''}</b>${L('終わったら内容を書いて「記録する」。来られなくなったら下の「キャンセルにする」。','After the lesson, add notes and tap “Log lesson”. If it’s off, use “Cancel lesson” below.')}</div>`:''}
-    <div class="fld"><span class="lb">${L('生徒','Student')} <span class="hint" style="font-weight:400">— ${L('2人選ぶとペアになります','pick two for a pair lesson')}</span></span><div class="chips" id="f-stu">${S.students.map(x=>`<button class="chip" data-act="fStu" data-id="${x.id}" aria-pressed="${sids.includes(x.id)}">${esc(x.name)}</button>`).join('')}</div><div class="hint" id="f-type"></div></div>
+    <div class="fld"><span class="lb">${L('生徒','Student')} <span class="hint" style="font-weight:400">— ${L('2人選ぶとペアになります','pick two for a pair lesson')}</span></span><div id="f-pairs">${pairChips('fPair',sids)}</div><div class="chips" id="f-stu">${studentsSorted().map(x=>`<button class="chip" data-act="fStu" data-id="${x.id}" aria-pressed="${sids.includes(x.id)}">${esc(x.name)}</button>`).join('')}</div><div class="hint" id="f-type"></div></div>
     <div id="f-prev"></div>
     <div class="two"><div class="fld"><label for="f-date">${L('日付','Date')}</label><input type="date" id="f-date" value="${base.date}"></div>
     <div class="fld"><span class="lb">${L('開始','Start')}</span>${timeSel('f-st',base.time)}</div>
@@ -858,6 +892,18 @@ function renderPay(){
         :`<div class="hint">${L('使える回数券がありません。生徒の画面の「＋ 回数券を追加」から登録できます。','No pack available. Add one from the student page (“＋ Add pack”).')}</div>`)
       :`<div class="two"><div class="fld" style="margin:0"><label for="f-amt-${sid}">${L('金額（$）','Amount ($)')}</label><input type="number" class="f-amount" id="f-amt-${sid}" data-sid="${sid}" inputmode="decimal" min="0" value="${esc(P.amount)}"></div></div>
         ${P.mode==='paid'?methodChips('fMethod',P.method,sid):`<div class="hint">${L('ホームの「まだいただいていない代金」に出ます（予定のうちは出ません）。','Shows under “Payments due” on Home (not while still scheduled).')}</div>`}`}</div>`}).join('');
+}
+/* 記録の画面で生徒（ペア）を選び直す */
+function setFSids(ids){
+  F.sids=ids;
+  document.querySelectorAll('[data-act="fStu"]').forEach(x=>x.setAttribute('aria-pressed',F.sids.includes(x.dataset.id)));
+  document.querySelectorAll('[data-act="fPair"]').forEach(x=>x.setAttribute('aria-pressed',samePair(S.pairs.find(q=>q.id===x.dataset.id),F.sids)));
+  const d=durOf('f')||60;
+  F.sids.forEach(x=>{if(!F.pay[x]||F.sids.length>1&&F.pay[x].mode==='ticket'&&!F.ids[x])F.pay[x]=payState(null,x,F.sids.length,d)});
+  recalcAmounts();
+  F.sids.forEach(x=>{if(F.isNew&&!F.carry[x]&&pendingOf(x)[0])F.carry[x]=pendingOf(x)[0].id});
+  Object.keys(F.carry).forEach(x=>{if(!F.sids.includes(x))delete F.carry[x]});
+  refreshForm();
 }
 function recalcAmounts(){const d=durOf('f')||60;F.sids.forEach(sid=>{F.pay[sid].amount=priceFor(sid,d,F.sids.length)});}
 
@@ -926,16 +972,18 @@ function scopeHtml(what){const ev=what==='event';return `<div class="fld"><span 
 function eventForm(o={}){
   const ev=o.ev;
   const tab=ev?'event':(o.kind||(UI.tab==='cal'&&UI.filter==='event'?'event':UI.tab==='home'&&UI.hfilter==='event'?'event':'lesson'));
-  const sid0=o.sid||(UI.tab==='stu'&&UI.sid)||null;
+  const pr=o.pair?S.pairs.find(p=>p.id===o.pair):null;
+  const sid0=pr?null:(o.sid||(UI.tab==='stu'&&UI.sid)||null);
   const date=ev?.date||o.date||today(), time=ev?.time||o.time||'16:00';
   F.tdur=ev?(ev.dur||60):(sid0?stu(sid0).dur:60);
-  F.e={tab,ev,sids:sid0?[sid0]:[],type:ev?.type||'practice',carry:o.carry||null,useCarry:true};
+  if(pr)F.tdur=60;
+  F.e={tab,ev,sids:pr?pairMembers(pr).map(s=>s.id):sid0?[sid0]:[],type:ev?.type||'practice',carry:o.carry||null,useCarry:true};
   F.confirmDelE=false;
   const later=ev?laterInSeries(ev):[];
   openSheet(ev?L('柔道の予定を編集','Edit judo event'):L('予定を追加','Add event'),`
     ${ev?'':`<div class="tabs2"><button data-act="eTab" data-v="lesson" aria-pressed="${tab==='lesson'}">${L('プライベートレッスン','Private lesson')}</button><button data-act="eTab" data-v="event" aria-pressed="${tab==='event'}">${L('柔道の予定','Judo event')}</button></div>`}
     <div class="only-lesson">
-      <div class="fld"><span class="lb">${L('生徒','Student')} <span class="hint" style="font-weight:400">— ${L('2人選ぶとペア','pick two for a pair')}</span></span><div class="chips">${S.students.map(x=>`<button class="chip" data-act="eStu" data-id="${x.id}" aria-pressed="${F.e.sids.includes(x.id)}">${esc(x.name)}</button>`).join('')||`<span class="hint">${L('先に「生徒」タブで生徒を追加してください。','Add a student in the Students tab first.')}</span>`}</div></div>
+      <div class="fld"><span class="lb">${L('生徒','Student')} <span class="hint" style="font-weight:400">— ${L('2人選ぶとペア','pick two for a pair')}</span></span><div id="e-pairs">${pairChips('ePair',F.e.sids)}</div><div class="chips">${studentsSorted().map(x=>`<button class="chip" data-act="eStu" data-id="${x.id}" aria-pressed="${F.e.sids.includes(x.id)}">${esc(x.name)}</button>`).join('')||`<span class="hint">${L('先に「生徒」タブで生徒を追加してください。','Add a student in the Students tab first.')}</span>`}</div></div>
       <div id="e-carry"></div>
     </div>
     <div class="only-event">
@@ -1092,6 +1140,7 @@ function stuForm(s){
   F.custom=s?.custom30!=null;
   openSheet(s?L('生徒を編集','Edit student'):L('生徒を追加','Add student'),`
     <div class="fld"><label for="s-name">${L('名前','Name')}</label><input id="s-name" value="${esc(s?.name||'')}" placeholder="${L('例：Ken Tanaka','e.g. Ken Tanaka')}"></div>
+    <div class="fld"><label for="s-kana">${L('ふりがな（並べ替え用・なくても大丈夫）','Sort name (optional)')}</label><input id="s-kana" value="${esc(s?.kana||'')}" placeholder="${L('例：たなか けん　※漢字の名前のときだけ','e.g. Tanaka Ken')}"></div>
     <div class="fld"><span class="lb">${L('料金（マンツーマン）','Rate (private)')}</span><div class="radio">
       <label><input type="radio" name="price" value="std" ${F.custom?'':'checked'}> ${L(`標準：30分 ${money(S.settings.solo30)}`,`Standard: ${money(S.settings.solo30)} / 30 min`)}</label>
       <label><input type="radio" name="price" value="custom" ${F.custom?'checked':''}> ${L('この生徒だけ別の料金','Custom rate for this student')}</label></div>
@@ -1203,11 +1252,33 @@ document.addEventListener('click',e=>{
         else toast(L(`✓ ${data?.sent||0}台に送りました`,`✓ Sent to ${data?.sent||0} device(s)`),data?.sent?'':L('この端末で通知をオンにしてください','Turn on notifications on this device'));
       }).catch(e=>toast(L('送れませんでした','Couldn’t send'),e.message));break}
     case 'hfilter':UI.hfilter=v;render();break;
-    case 'newEvent':eventForm({date:b.dataset.date,sid:b.dataset.sid,kind:b.dataset.kind});break;
+    case 'newEvent':eventForm({date:b.dataset.date,sid:b.dataset.sid,kind:b.dataset.kind,pair:b.dataset.pair});break;
     case 'openEvent':eventForm({ev:S.events.find(x=>x.id===id)});break;
     case 'eTab':F.e.tab=v;document.querySelectorAll('[data-act="eTab"]').forEach(x=>x.setAttribute('aria-pressed',x===b));refreshEv();break;
+    case 'newPair':pairForm(null,b.dataset.sid);break;
+    case 'editPair':pairForm(S.pairs.find(p=>p.id===id));break;
+    case 'prPick':{const on=!F.pair.sel.includes(id);
+      if(on&&F.pair.sel.length>=2)F.pair.sel.shift();
+      F.pair.sel=on?[...F.pair.sel,id]:F.pair.sel.filter(x=>x!==id);
+      document.querySelectorAll('[data-act="prPick"]').forEach(x=>x.setAttribute('aria-pressed',F.pair.sel.includes(x.dataset.id)));break}
+    case 'savePair':{
+      const sel=F.pair.sel;if(sel.length!==2){toast(L('2人を選んでください','Pick two students'));return}
+      if(S.pairs.some(p=>p.id!==F.pair.id&&samePair(p,sel))){toast(L('このペアはもう登録されています','This pair already exists'));return}
+      if(F.pair.id)Object.assign(S.pairs.find(p=>p.id===F.pair.id),{a:sel[0],b:sel[1]});else S.pairs.push({id:uid(),a:sel[0],b:sel[1]});
+      const nm=pairName({a:sel[0],b:sel[1]});
+      run(()=>{save();closeSheet();render()},F.pair.id?L('ペアを変更しました','Pair updated'):L('ペアを登録しました','Pair added'),nm);break}
+    case 'delPair':{
+      if(!F.pair.confirmDel){F.pair.confirmDel=true;b.textContent=L('もう一度押すと解除します','Tap again to remove');return}
+      S.pairs=S.pairs.filter(p=>p.id!==F.pair.id);run(()=>{save();closeSheet();render()},L('ペアを解除しました','Pair removed'),L('これまでの記録はそのままです','Past lessons are kept'));break}
+    case 'ePair':{const p=S.pairs.find(x=>x.id===id);const ids=pairMembers(p).map(x=>x.id);
+      F.e.sids=samePair(p,F.e.sids)?[]:ids;
+      document.querySelectorAll('[data-act="eStu"]').forEach(x=>x.setAttribute('aria-pressed',F.e.sids.includes(x.dataset.id)));
+      document.querySelectorAll('[data-act="ePair"]').forEach(x=>x.setAttribute('aria-pressed',samePair(S.pairs.find(q=>q.id===x.dataset.id),F.e.sids)));
+      refreshEv();break}
+    case 'fPair':{const p=S.pairs.find(x=>x.id===id);setFSids(pairMembers(p).map(x=>x.id));break}
     case 'eStu':{const on=!F.e.sids.includes(id);if(on&&F.e.sids.length>=2){toast(L('ペアは2人までです','A pair is two students'),L('先にどちらかを外してください','Deselect one first'));return}
       F.e.sids=on?[...F.e.sids,id]:F.e.sids.filter(x=>x!==id);b.setAttribute('aria-pressed',on);
+      document.querySelectorAll('[data-act="ePair"]').forEach(x=>x.setAttribute('aria-pressed',samePair(S.pairs.find(q=>q.id===x.dataset.id),F.e.sids)));
       if(on&&F.e.sids.length===1){F.tdur=stu(id).dur;setT('e-en',fromMin(toMin(readT('e-st'))+F.tdur))}
       refreshEv();break}
     case 'eType':{const old=evtName(F.e.type);F.e.type=v;document.querySelectorAll('[data-act="eType"]').forEach(x=>x.setAttribute('aria-pressed',x===b));
@@ -1244,7 +1315,7 @@ document.addEventListener('click',e=>{
     case 'saveStu':{
       const name=g('s-name').value.trim();if(!name){toast(L('名前を入れてください','Enter a name'));return}
       const custom=document.querySelector('input[name="price"]:checked').value==='custom';
-      const d={name,custom30:custom?(+g('s-c30').value||S.settings.solo30):null,dur:+g('s-dur').value||60,memo:g('s-memo').value.trim()};
+      const d={name,kana:g('s-kana').value.trim(),custom30:custom?(+g('s-c30').value||S.settings.solo30):null,dur:+g('s-dur').value||60,memo:g('s-memo').value.trim()};
       if(id)Object.assign(stu(id),d);else S.students.push({id:uid(),color:COLORS[S.students.length%COLORS.length],todos:[],...d});
       run(()=>{save();closeSheet();render()},id?L('保存しました','Saved'):L(`${name} さんを追加しました`,`Added ${name}`));break}
     case 'newPkg':pkgForm(sid);break;
@@ -1269,14 +1340,7 @@ document.addEventListener('click',e=>{
       const on=!F.sids.includes(id);
       if(on&&F.sids.length>=2){toast(L('ペアは2人までです','A pair is two students'),L('先にどちらかを外してください','Deselect one first'));return}
       if(!on&&F.sids.length===1)return;
-      F.sids=on?[...F.sids,id]:F.sids.filter(x=>x!==id);
-      b.setAttribute('aria-pressed',on);
-      const d=durOf('f')||60;
-      F.sids.forEach(x=>{if(!F.pay[x]||F.sids.length>1&&F.pay[x].mode==='ticket'&&!F.ids[x])F.pay[x]=payState(null,x,F.sids.length,d)});
-      recalcAmounts();
-      F.sids.forEach(x=>{if(F.isNew&&!F.carry[x]&&pendingOf(x)[0])F.carry[x]=pendingOf(x)[0].id});
-      Object.keys(F.carry).forEach(x=>{if(!F.sids.includes(x))delete F.carry[x]});
-      refreshForm();break}
+      setFSids(on?[...F.sids,id]:F.sids.filter(x=>x!==id));break}
     case 'fWaza':{const on=!F.waza.includes(v);F.waza=on?[...F.waza,v]:F.waza.filter(x=>x!==v);b.setAttribute('aria-pressed',on);break}
     case 'fTodo':{const on=!F.todo.has(id);on?F.todo.add(id):F.todo.delete(id);b.setAttribute('aria-pressed',on);break}
     case 'fMode':F.pay[sid].mode=v;renderPay();break;
