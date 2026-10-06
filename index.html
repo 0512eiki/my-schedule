@@ -237,6 +237,10 @@ td.r,th.r{text-align:right;font-family:var(--f-num)}
 .typechip{--c:var(--t-other)}
 .pairchip{border-style:dashed;border-width:1.5px;font-weight:700}
 .sheet:has(.foot){padding-bottom:0}
+.overlay.ask{z-index:55;align-items:center;padding:16px}
+.dialog{background:var(--bg);border-radius:18px;padding:20px 18px;max-width:380px;width:100%;display:grid;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.dialog b{font-size:17px}
+.dialog p{margin:0 0 4px;color:var(--muted);font-size:14px}
 .foot{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:10px 0 calc(12px + env(safe-area-inset-bottom,0px));margin-top:10px;display:grid;gap:8px;z-index:3}
 .whenbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:10px;margin-bottom:14px}
 .whenbox .lb{font-size:13px;font-weight:700;color:var(--muted)}
@@ -897,14 +901,13 @@ function lessonForm(l,preset={}){
   openSheet(title,`
     ${canc?`<div class="prev"><b>${L(`キャンセル（${esc(tReason(l.cancel?.reason||''))}）`,`Cancelled (${esc(tReason(l.cancel?.reason||''))})`)}</b>${l.cancel?.carry==='moved'&&to?L(`振替：${dl(to.date)} に繰り越し済み`,`Moved to the make-up on ${dl(to.date)}`):l.cancel?.carry==='pending'?L('振替の日にちはまだ決まっていません。','Make-up not scheduled yet.'):L('繰り越しなし','Not carried over')}</div>
       <div style="display:grid;gap:10px">${l.cancel?.carry==='pending'?`<button class="btn block" data-act="schedCarry" data-id="${l.id}">${L('振替の日にちを決める','Schedule the make-up')}</button>`:''}<button class="btn block ghost" data-act="uncancel" data-id="${l.id}">${L('キャンセルを取り消す（予定に戻す）','Undo cancel (back to scheduled)')}</button><button class="btn block danger" data-act="delLesson" id="f-del">${L('この記録を消す','Delete this record')}</button></div>`:`
-    ${base.status==='planned'&&!isNew?`<div class="prev"><b>${L('予定','Scheduled')}${l.from?L('（振替）',' (make-up)'):''}</b>${L('終わったら内容を書いて「記録する」。来られなくなったら下の「キャンセルにする」。','After the lesson, add notes and tap “Log lesson”. If it’s off, use “Cancel lesson” below.')}</div>`:''}
+    ${base.status==='planned'&&!isNew?`<div class="prev"><b>${L('予定','Scheduled')}${l.from?L('（振替）',' (make-up)'):''}${l.seriesId&&laterLessons(Object.values(F.ids)).length?` ↻ ${L('繰り返し','repeating')}`:''}</b>${L('終わったら内容を書いて「記録する」。来られなくなったら下の「キャンセルにする」。','After the lesson, add notes and tap “Log lesson”. If it’s off, use “Cancel lesson” below.')}</div>`:''}
     <div class="fld"><span class="lb">${L('生徒','Student')} <span class="hint" style="font-weight:400">— ${L('2人選ぶとペアになります','pick two for a pair lesson')}</span></span><div id="f-pairs">${pairChips('fPair',sids)}</div><div class="chips" id="f-stu">${studentsSorted().map(x=>`<button class="chip" data-act="fStu" data-id="${x.id}" aria-pressed="${sids.includes(x.id)}">${esc(x.name)}</button>`).join('')}</div><div class="hint" id="f-type"></div></div>
     <div id="f-prev"></div>
     <div class="two"><div class="fld"><label for="f-date">${L('日付','Date')}</label><input type="date" id="f-date" value="${base.date}"></div>
     <div class="fld"><span class="lb">${L('時間','Time')}</span><div class="trow">${timeSel('f-st',base.time)}<span class="arrow">→</span>${timeSel('f-en',fromMin(toMin(base.time)+base.dur))}</div></div></div>
     ${durChips('f',base.dur)}
     <div class="fld"><label for="f-place">${L('場所','Location')}</label><input id="f-place" maxlength="120" value="${esc(base.place||'')}" placeholder="${L('例：WJA道場','e.g. WJA Dojo')}"></div>
-    ${l&&l.seriesId&&base.status==='planned'&&laterInSeries(l).length?scopeHtml('lesson'):''}
     <div class="fld"><label for="f-plan">${L('この日にやる予定','Plan for this lesson')}</label><textarea id="f-plan" maxlength="2000" style="min-height:60px" placeholder="${L('予定を入れるときに書いておくと、当日ここに出ます','Write it when scheduling and it shows up here on the day')}">${esc(base.plan)}</textarea></div>
     <div id="f-todos"></div>
     <div class="fld"><span class="lb">${L('練習した技・内容','Techniques practiced')}</span>${Object.entries(WAZA).map(([gn,ws])=>`<div class="hint" style="margin-top:2px">${L(gn,WAZA_GROUP_EN[gn])}</div><div class="chips">${ws.map(w=>`<button class="chip" data-act="fWaza" data-v="${w}" aria-pressed="${F.waza.includes(w)}">${tWaza(w)}</button>`).join('')}</div>`).join('')}
@@ -965,16 +968,21 @@ function setFSids(ids){
 }
 function recalcAmounts(){const d=durOf('f')||60;F.sids.forEach(sid=>{F.pay[sid].amount=priceFor(sid,d,F.sids.length)});}
 
-function saveLesson(as){
+function saveLesson(as,scope){
   if(!F.sids.length){toast(L('生徒を選んでください','Pick a student'));return}
   const status=as==='planned'?'planned':'done';
   for(const sid of F.sids){const P=F.pay[sid];if(!F.carry[sid]&&P.mode==='ticket'&&!P.pid){toast(L(`${stu(sid).name}：回数券を選んでください`,`${stu(sid).name}: pick a pack`),L('または「支払い済み／未払い」に切り替えてください','or switch to Paid / Unpaid'));return}}
   const date=g('f-date').value||today(), time=readT('f-st'), dur=durOf('f');
   if(dur<=0){toast(L('終了の時刻を開始より後にしてください','End time must be after the start'));return}
-  const scope=document.querySelector('input[name="scope"]:checked')?.value;
+  const place=g('f-place').value.trim();
+  const first=byId(Object.values(F.ids)[0]);
+  const later=first?laterLessons(Object.values(F.ids)):[];
+  const changed=first&&(first.date!==date||first.time!==time||first.dur!==dur||(first.place||'')!==place);
+  if(scope===undefined&&later.length&&changed){askScope('save',later.length,sc=>saveLesson(as,sc));return}
+  const shift=first?dayDiff(first.date,date):0;
   const gid=F.sids.length>1?(F.gid||uid()):null;
   Object.entries(F.ids).forEach(([sid,id])=>{if(!F.sids.includes(sid))S.lessons=S.lessons.filter(l=>l.id!==id)});
-  const shared={date,time,dur,status,gid,place:g('f-place').value.trim(),waza:[...F.waza],content:g('f-content').value.trim(),next:g('f-next').value.trim(),plan:g('f-plan').value.trim()};
+  const shared={date,time,dur,status,gid,place,waza:[...F.waza],content:g('f-content').value.trim(),next:g('f-next').value.trim(),plan:g('f-plan').value.trim()};
   const saved=[];
   F.sids.forEach(sid=>{
     const id=F.ids[sid]||uid(), old=byId(id);
@@ -987,7 +995,7 @@ function saveLesson(as){
     saved.push(rec);
     if(status==='done')(stu(sid).todos||[]).forEach(t=>{if(F.todo.has(t.id)){t.done=true;t.doneOn=date}});
   });
-  if(scope==='after'){const first=byId(Object.values(F.ids)[0]);laterInSeries(first).forEach(x=>{if(x.status==='planned'){x.time=time;x.dur=dur;x.place=shared.place;if(x.pay.mode==='per'&&!x.pay.paid)x.pay.amount=priceFor(x.sid,dur,group(x).length)}})}
+  if(scope==='after')later.flatMap(group).forEach(x=>{if(x.status!=='planned')return;x.date=addDays(x.date,shift);x.time=time;x.dur=dur;x.place=place;if(x.pay.mode==='per'&&!x.pay.paid)x.pay.amount=priceFor(x.sid,dur,group(x).length)});
   let booked='';
   if(g('f-book')?.checked&&g('f-bdate').value){
     const bd=g('f-bdate').value, bg=F.sids.length>1?uid():null;
@@ -995,7 +1003,7 @@ function saveLesson(as){
     booked=L(`次回 ${dl(bd)} を予約しました`,`Next lesson booked: ${dl(bd)}`);
   }
   const r=saved[0];
-  const sub=booked||(r.from?L('キャンセル分の振替として入れました','Saved as the make-up lesson'):r.pay.mode==='ticket'&&status==='done'?L(`回数券の残り ${left(S.packages.find(p=>p.id===r.pay.pid))}回`,`${left(S.packages.find(p=>p.id===r.pay.pid))} left in the pack`):'');
+  const sub=booked||(scope==='after'?L(`これ以降の ${later.length}件も変更しました`,`Also changed the ${later.length} following`):r.from?L('キャンセル分の振替として入れました','Saved as the make-up lesson'):r.pay.mode==='ticket'&&status==='done'?L(`回数券の残り ${left(S.packages.find(p=>p.id===r.pay.pid))}回`,`${left(S.packages.find(p=>p.id===r.pay.pid))} left in the pack`):'');
   run(()=>{save();closeSheet();render()},status==='planned'?L('予定を入れました','Scheduled'):L('記録しました。おつかれさまでした！','Logged. Nice work today!'),sub);
 }
 
@@ -1027,7 +1035,21 @@ function repeatDates(start,rule,mode,count,until){
 }
 function repeatLabel(rule,date){const d=parse(date),w=d.getDay();return {none:L('繰り返さない','Does not repeat'),daily:L('毎日','Daily'),weekly:L(`毎週 ${DOW[w]}曜日`,`Weekly on ${DOW_LONG[w]}`),biweekly:L(`隔週 ${DOW[w]}曜日`,`Every 2 weeks on ${DOW_LONG[w]}`),monthly:L(`毎月 ${d.getDate()}日`,`Monthly on day ${d.getDate()}`)}[rule]}
 function laterInSeries(x){return x&&x.seriesId?S.lessons.concat(S.events).filter(y=>y.seriesId===x.seriesId&&y.id!==x.id&&y.date>x.date&&(x.sid?y.sid===x.sid:true)):[]}
-function scopeHtml(what){const ev=what==='event';return `<div class="fld"><span class="lb">${L(`繰り返しの${ev?'予定':'レッスン'}`,`Repeating ${ev?'event':'lesson'}`)}</span><div class="radio"><label><input type="radio" name="scope" value="one" checked> ${L('この予定だけ','This one only')}</label><label><input type="radio" name="scope" value="after"> ${L('これ以降の予定すべて','This and all following')}<small>${L(`時刻・長さ・場所${ev?'・タイトル・種類・メモ':''}をまとめて変えます。消すときも、これ以降をまとめて消します`,`Changes time, length, location${ev?', title, type and notes':''} for all of them. Deleting also removes all following.`)}</small></label></div></div>`}
+/* 繰り返しの予定：保存・削除のときに「この予定だけ／これ以降すべて」を聞く */
+function laterLessons(ids){return dedupe(sortL([...new Map(ids.flatMap(id=>laterInSeries(byId(id))).filter(x=>x.status==='planned').map(x=>[x.id,x])).values()]))}
+const dayDiff=(a,b)=>Math.round((parse(b)-parse(a))/864e5);
+function askScope(kind,n,cb){
+  F.scopeCb=cb;
+  const del=kind==='delete';
+  const box=document.createElement('div');box.className='overlay ask';box.id='scope-ask';
+  box.innerHTML=`<div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="ask-t"><b id="ask-t">${del?L('繰り返しの予定を消す','Delete repeating event'):L('繰り返しの予定を変更','Change repeating event')}</b>
+    <p>${L(`このあとに、同じ繰り返しの予定が ${n}件あります。`,`There ${n===1?'is 1 more event':`are ${n} more events`} in this series after this one.`)}</p>
+    <button class="btn block" data-act="scopePick" data-v="one">${del?L('この予定だけ消す','Delete this one only'):L('この予定だけ変更','Change this one only')}</button>
+    <button class="btn block ${del?'danger':'ghost'}" data-act="scopePick" data-v="after">${del?L(`これ以降すべて消す（${n+1}件）`,`Delete this and following (${n+1})`):L(`これ以降すべて変更（${n+1}件）`,`Change this and following (${n+1})`)}</button>
+    <button class="btn block ghost" data-act="scopePick" data-v="cancel">${L('やめる','Cancel')}</button></div>`;
+  g('layer').appendChild(box);
+  box.querySelector('[data-v="one"]').focus();
+}
 
 /* 予定を追加（プライベートレッスン／柔道の予定） */
 function recentPlaces(){
@@ -1067,7 +1089,7 @@ function eventForm(o={}){
       <div id="e-edbox" class="drow"><span class="lb">${L('終わりの日（何日か続くとき）','Last day (multi-day)')}</span><input type="date" id="e-edate" value="${ev?.edate||''}"></div>
       <div class="trow e-times">${timeSel('e-st',time)}<span class="arrow">→</span>${timeSel('e-en',fromMin(toMin(time)+F.tdur))}<span class="dlabel" id="e-dlabel"></span></div>
       <div class="chips e-times" id="e-durs">${DURS.map(d=>`<button class="chip" data-act="durPick" data-p="e" data-v="${d}" aria-pressed="${d===F.tdur}">${d}${L('分',' min')}</button>`).join('')}</div>
-      ${ev?(later.length?scopeHtml('event'):''):`<div><span class="lb">${L('繰り返し','Repeat')}</span><div class="chips" style="margin-top:6px">${RP.map(([k,n])=>`<button class="chip" data-act="rpPick" data-v="${k}" aria-pressed="${k==='none'}">${n}</button>`).join('')}</div>
+      ${ev?(later.length?`<div class="hint">↻ ${L(`繰り返しの予定です（このあとに${later.length}件）。保存するときに、ほかの予定も変えるか聞きます。`,`Repeating event (${later.length} more after this). You’ll be asked whether to change the others when you save.`)}</div>`:''):`<div><span class="lb">${L('繰り返し','Repeat')}</span><div class="chips" style="margin-top:6px">${RP.map(([k,n])=>`<button class="chip" data-act="rpPick" data-v="${k}" aria-pressed="${k==='none'}">${n}</button>`).join('')}</div>
         <select id="rp" hidden>${RP.map(([k])=>`<option value="${k}">${k}</option>`).join('')}</select>
         <div id="rp-end" hidden style="margin-top:8px"><div class="drow"><select id="rp-mode" style="width:auto"><option value="count">${L('回数で終わる','Ends after')}</option><option value="until">${L('日付で終わる','Ends on')}</option></select>
           <span class="stepper" id="rp-cbox"><button data-act="rpStep" data-v="-1" aria-label="${L('減らす','Fewer')}">−</button><input type="number" id="rp-count" inputmode="numeric" min="2" max="150" value="10" aria-label="${L('回数','Times')}"><button data-act="rpStep" data-v="1" aria-label="${L('増やす','More')}">＋</button><span>${L('回','times')}</span></span>
@@ -1113,7 +1135,7 @@ function refreshEv(){
     E.carryObj=c||null;
   }
 }
-function saveEvent(){
+function saveEvent(scope){
   const E=F.e, isL=E.tab==='lesson';
   const date=g('e-date').value||today();
   const allDay=!isL&&g('e-allday').checked;
@@ -1123,11 +1145,13 @@ function saveEvent(){
   const when=(d,t)=>`${dl(d)}${allDay?' '+L('終日','all day'):' '+t}`;
   if(E.ev){
     const title=g('e-title').value.trim()||evtName(E.type);
-    const scope=document.querySelector('input[name="scope"]:checked')?.value;
+    const later=laterInSeries(E.ev);
+    if(scope===undefined&&later.length){askScope('save',later.length,sc=>saveEvent(sc));return}
     const edate=allDay&&g('e-edate').value>date?g('e-edate').value:'';
+    const shift=dayDiff(E.ev.date,date), span=edate?dayDiff(date,edate):0;
     Object.assign(E.ev,{title,type:E.type,date,time,dur,allDay,edate,place,memo:g('e-memo').value.trim()});
-    if(scope==='after')laterInSeries(E.ev).forEach(x=>Object.assign(x,{title,type:E.type,time,dur,allDay,place,memo:E.ev.memo}));
-    run(()=>{save();closeSheet();render()},L('予定を保存しました','Event saved'),scope==='after'?L('これ以降の予定もまとめて変えました','All following events updated too'):'');return;
+    if(scope==='after')later.forEach(x=>{const nd=addDays(x.date,shift);Object.assign(x,{title,type:E.type,date:nd,time,dur,allDay,edate:span?addDays(nd,span):'',place,memo:E.ev.memo})});
+    run(()=>{save();closeSheet();render()},L('予定を保存しました','Event saved'),scope==='after'?L(`これ以降の ${later.length}件も変更しました`,`Also changed the ${later.length} following`):'');return;
   }
   const rule=g('rp').value, dates=repeatDates(date,rule,g('rp-mode').value,Math.max(1,+g('rp-count').value||1),g('rp-until').value);
   const series=dates.length>1?uid():null;
@@ -1367,11 +1391,12 @@ document.addEventListener('click',e=>{
       const t=g('e-title');if(!t.value.trim()||t.value===old)t.value=evtName(v);break}
     case 'saveEvent':saveEvent();break;
     case 'delEvent':{
+      const later=laterInSeries(F.e.ev);
+      const doDel=sc=>{const ids=[F.e.ev.id,...(sc==='after'?later.map(x=>x.id):[])];S.events=S.events.filter(x=>!ids.includes(x.id));run(()=>{save();closeSheet();render()},L('予定を消しました','Event deleted'),ids.length>1?L(`${ids.length}件`,`${ids.length} events`):'')};
+      if(later.length){askScope('delete',later.length,doDel);return}
       if(!F.confirmDelE){F.confirmDelE=true;b.textContent=L('もう一度押すと消えます','Tap again to delete');return}
-      F.confirmDelE=false;
-      const after=document.querySelector('input[name="scope"]:checked')?.value==='after';
-      const ids=[F.e.ev.id,...(after?laterInSeries(F.e.ev).map(x=>x.id):[])];
-      S.events=S.events.filter(x=>!ids.includes(x.id));run(()=>{save();closeSheet();render()},L('予定を消しました','Event deleted'),ids.length>1?L(`${ids.length}件`,`${ids.length} events`):'');break}
+      F.confirmDelE=false;doDel('one');break}
+    case 'scopePick':{g('scope-ask')?.remove();const cb=F.scopeCb;F.scopeCb=null;if(v!=='cancel'&&cb)cb(v);break}
     case 'view':UI.tgScroll=null;if(v==='month'){UI.cal=UI.anchor.slice(0,7);UI.day=UI.anchor}else if(UI.view==='month')UI.anchor=UI.day;UI.view=v;render();break;
     case 'filter':UI.filter=v;render();break;
     case 'goToday':UI.anchor=today();UI.day=today();UI.cal=today().slice(0,7);UI.tgScroll=null;render();break;
@@ -1432,11 +1457,14 @@ document.addEventListener('click',e=>{
     case 'fCarry':{if(b.checked)F.carry[sid]=pendingOf(sid)[0]?.id;else delete F.carry[sid];renderPay();break}
     case 'saveLesson':saveLesson(b.dataset.as);break;
     case 'delLesson':{
+      const base=Object.values(F.ids), first=byId(base[0]);
+      const later=first&&first.status==='planned'?laterLessons(base):[];
+      const doDel=sc=>{const ids=[...base,...(sc==='after'?later.flatMap(group).map(x=>x.id):[])];
+        S.lessons.forEach(l=>{if(l.cancel?.to&&ids.includes(l.cancel.to)){l.cancel.carry='pending';delete l.cancel.to}});
+        S.lessons=S.lessons.filter(l=>!ids.includes(l.id));run(()=>{save();closeSheet();render()},L('消しました','Deleted'),sc==='after'?L(`これ以降の ${later.length}件も消しました`,`Also deleted the ${later.length} following`):'')};
+      if(later.length){askScope('delete',later.length,doDel);return}
       if(!F.confirmDel){F.confirmDel=true;b.textContent=L('もう一度押すと消えます','Tap again to delete');return}
-      const ids=Object.values(F.ids);
-      if(document.querySelector('input[name="scope"]:checked')?.value==='after'){const f=byId(ids[0]);laterInSeries(f).filter(x=>x.status==='planned').forEach(x=>ids.push(x.id))}
-      S.lessons.forEach(l=>{if(l.cancel?.to&&ids.includes(l.cancel.to)){l.cancel.carry='pending';delete l.cancel.to}});
-      S.lessons=S.lessons.filter(l=>!ids.includes(l.id));run(()=>{save();closeSheet();render()},L('消しました','Deleted'));break}
+      doDel('one');break}
     case 'cancelOpen':cancelForm(id);break;
     case 'cxReason':F.cxl.reason=v;b.parentElement.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));break;
     case 'cancelSave':cancelSave();break;
@@ -1480,7 +1508,7 @@ document.addEventListener('keydown',e=>{
   }
   if(e.target.id==='todo-new'&&e.key==='Enter'&&!e.isComposing){e.preventDefault();document.querySelector('[data-act="todoAdd"]').click()}
   if((e.target.id==='lg-pw'||e.target.id==='lg-id')&&e.key==='Enter'&&!e.isComposing){e.preventDefault();document.querySelector('[data-act="login"]')?.click()}
-  if(e.key==='Escape')closeSheet();
+  if(e.key==='Escape'){if(g('scope-ask')){g('scope-ask').remove();F.scopeCb=null}else closeSheet()}
 });
 let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(UI.tab==='cal'&&!g('layer').innerHTML)render()},200)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
