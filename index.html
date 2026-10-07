@@ -253,6 +253,14 @@ td.r,th.r{text-align:right;font-family:var(--f-num)}
 .stepper{display:inline-flex;align-items:center;gap:6px}
 .stepper button{border:0;background:var(--soft);border-radius:999px;width:36px;height:36px;font-size:18px;font-weight:700}
 .stepper input{width:64px;text-align:center}
+.aibox{background:var(--accent-soft);border:1px solid var(--accent);border-radius:14px;padding:12px;margin-bottom:14px;display:grid;gap:8px}
+.aibox .lbx{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--accent)}
+.aibox .sum{white-space:pre-wrap;font-size:14px;line-height:1.7}
+.kv{display:grid;grid-template-columns:minmax(80px,max-content) 1fr;gap:4px 12px;font-size:14px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;white-space:pre-wrap;min-width:0;overflow-wrap:anywhere}
+.filerow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:14px;text-align:center;color:var(--muted);font-size:14px;cursor:pointer;display:block}
+.drop input{display:none}
 .warnbox{background:var(--plan-soft);border:1px solid var(--plan);color:var(--ink);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:14px}
 .warnbox b{color:var(--plan)}
 .pill.clash{background:var(--plan-soft);color:var(--plan);box-shadow:inset 0 0 0 1px var(--plan)}
@@ -671,7 +679,7 @@ function eventRow(e,showDate){
   const c=evtColor(e.type), ad=L('終日','All day');
   return `<button class="row" data-act="openEvent" data-id="${e.id}">
     <div class="when">${showDate?`<b>${md(e.date)}</b><span>${dow(e.date)} ${e.allDay?ad:e.time}</span>`:`<b>${e.allDay?ad:e.time}</b><span>${e.allDay?'':e.dur+L('分',' min')}</span>`}</div>
-    <div class="what"><div class="nm"><i class="dot" style="background:${c}"></i>${esc(e.title)}${e.seriesId?'<span class="type" style="color:var(--muted)">↻</span>':''}</div><div class="sub">${esc([e.allDay&&e.edate?`〜${md(e.edate)}`:'',e.place,e.memo].filter(Boolean).join(' ｜ '))||(e.allDay?ad:`${e.time}–${fromMin(toMin(e.time)+e.dur)}`)}</div></div>
+    <div class="what"><div class="nm"><i class="dot" style="background:${c}"></i>${esc(e.title)}${e.info?`<span class="type">${L('まとめ','info')}</span>`:''}${e.seriesId?'<span class="type" style="color:var(--muted)">↻</span>':''}</div><div class="sub">${esc([e.allDay&&e.edate?`〜${md(e.edate)}`:'',e.place,e.memo].filter(Boolean).join(' ｜ '))||(e.allDay?ad:`${e.time}–${fromMin(toMin(e.time)+e.dur)}`)}</div></div>
     <span class="pill evt" style="--c:${c}">${evtName(e.type)}</span></button>`;
 }
 const itemRow=(it,showDate)=>it.kind==='lesson'?lessonRow(it.o,showDate):eventRow(it.o,showDate);
@@ -1106,11 +1114,13 @@ function eventForm(o={}){
   const tab=ev?'event':(o.kind||(UI.tab==='cal'&&UI.filter==='event'?'event':UI.tab==='home'&&UI.hfilter==='event'?'event':'lesson'));
   const pr=o.pair?S.pairs.find(p=>p.id===o.pair):null;
   const sid0=pr?null:(o.sid||(UI.tab==='stu'&&UI.sid)||null);
-  const date=ev?.date||o.date||today();
+  const pf=o.prefill||null;
+  const date=ev?.date||pf?.date||o.date||today();
   const firstSid=pr?pairMembers(pr)[0].id:sid0;
-  const time=ev?.time||o.time||(firstSid&&lastTimeOf(firstSid))||'16:00';
-  F.tdur=ev?(ev.dur||60):(sid0?stu(sid0).dur:60);
-  F.e={tab,ev,sids:pr?pairMembers(pr).map(s=>s.id):sid0?[sid0]:[],type:ev?.type||'practice',carry:o.carry||null,useCarry:true,timeFixed:!!(ev||o.time)};
+  const time=ev?.time||pf?.time||o.time||(firstSid&&lastTimeOf(firstSid))||'16:00';
+  F.tdur=ev?(ev.dur||60):pf?(pf.dur||120):(sid0?stu(sid0).dur:60);
+  const evx=ev||pf||{};
+  F.e={tab,ev,pf,dlSel:new Set((pf?.info?.deadlines||[]).map((_,i)=>i)),sids:pr?pairMembers(pr).map(s=>s.id):sid0?[sid0]:[],type:evx.type||'practice',carry:o.carry||null,useCarry:true,timeFixed:!!(ev||o.time)};
   F.confirmDelE=false;
   const later=ev?laterInSeries(ev):[];
   const places=recentPlaces();
@@ -1122,15 +1132,17 @@ function eventForm(o={}){
       <div id="e-carry"></div>
     </div>
     <div class="only-event">
-      <div class="fld"><input class="ttl" id="e-title" maxlength="120" placeholder="${L('タイトル（例：チーム練習）','Title (e.g. Team practice)')}" value="${esc(ev?.title||'')}" aria-label="${L('タイトル','Title')}"></div>
+      ${!ev&&!pf?`<button class="btn block ghost" data-act="importOpen" style="margin-bottom:14px">${L('案内（PDF・スクショ・文章）から自動で入れる','Fill in from a flyer, screenshot or text')}</button>`:''}
+      ${pf?aiPreview(pf):''}${ev&&(ev.info||ev.files?.length)?infoCard(ev):''}
+      <div class="fld"><input class="ttl" id="e-title" maxlength="120" placeholder="${L('タイトル（例：チーム練習）','Title (e.g. Team practice)')}" value="${esc(evx.title||'')}" aria-label="${L('タイトル','Title')}"></div>
       <div class="fld"><div class="chips">${EVT.map(([k,,,c])=>`<button class="chip typechip" style="--c:var(${c})" data-act="eType" data-v="${k}" aria-pressed="${F.e.type===k}">${evtName(k)}</button>`).join('')}</div></div>
     </div>
     <div class="whenbox">
       <div class="drow"><span class="lb" style="width:100%">${L('いつ','When')}</span>
         <button class="chip" data-act="eDate" data-v="0">${L('今日','Today')}</button><button class="chip" data-act="eDate" data-v="1">${L('明日','Tomorrow')}</button><button class="chip" data-act="eDate" data-v="7">${L('1週間後','In a week')}</button>
         <input type="date" id="e-date" value="${date}" aria-label="${L('日付','Date')}"></div>
-      <div class="only-event"><label class="check"><input type="checkbox" id="e-allday" ${ev?.allDay?'checked':''}> ${L('終日','All day')}</label></div>
-      <div id="e-edbox" class="drow"><span class="lb">${L('終わりの日（何日か続くとき）','Last day (multi-day)')}</span><input type="date" id="e-edate" value="${ev?.edate||''}"></div>
+      <div class="only-event"><label class="check"><input type="checkbox" id="e-allday" ${evx.allDay?'checked':''}> ${L('終日','All day')}</label></div>
+      <div id="e-edbox" class="drow"><span class="lb">${L('終わりの日（何日か続くとき）','Last day (multi-day)')}</span><input type="date" id="e-edate" value="${evx.edate||''}"></div>
       <div class="trow e-times">${timeSel('e-st',time)}<span class="arrow">→</span>${timeSel('e-en',fromMin(toMin(time)+F.tdur))}<span class="dlabel" id="e-dlabel"></span></div>
       <div class="chips e-times" id="e-durs">${DURS.map(d=>`<button class="chip" data-act="durPick" data-p="e" data-v="${d}" aria-pressed="${d===F.tdur}">${d}${L('分',' min')}</button>`).join('')}</div>
       ${ev?(later.length?`<div class="hint">↻ ${L(`繰り返しの予定です（このあとに${later.length}件）。保存するときに、ほかの予定も変えるか聞きます。`,`Repeating event (${later.length} more after this). You’ll be asked whether to change the others when you save.`)}</div>`:''):`<div><span class="lb">${L('繰り返し','Repeat')}</span><div class="chips" style="margin-top:6px">${RP.map(([k,n])=>`<button class="chip" data-act="rpPick" data-v="${k}" aria-pressed="${k==='none'}">${n}</button>`).join('')}</div>
@@ -1140,13 +1152,13 @@ function eventForm(o={}){
           <span id="rp-ubox" hidden><input type="date" id="rp-until" value="${addDays(date,90)}" aria-label="${L('この日まで','Until')}"></span></div>
         <div class="hint" id="rp-sum" style="margin-top:6px"></div></div></div>`}
     </div>
-    <div class="fld"><label for="e-place">${L('場所','Location')}</label><input id="e-place" list="e-places" maxlength="120" value="${esc(ev?.place||'')}" placeholder="${L('例：WJA道場','e.g. WJA Dojo')}">
+    <div class="fld"><label for="e-place">${L('場所','Location')}</label><input id="e-place" list="e-places" maxlength="120" value="${esc(evx.place||'')}" placeholder="${L('例：WJA道場','e.g. WJA Dojo')}">
       <datalist id="e-places">${places.map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
       ${places.length?`<div class="chips">${places.slice(0,4).map(p=>`<button class="chip" data-act="ePlace" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>`:''}</div>
     <div id="e-warn"></div>
     <div class="only-lesson"><div class="pricebar" id="e-price" hidden></div></div>
     <div class="fld only-lesson"><label for="e-plan">${L('この日にやる予定（なくても大丈夫）','Plan (optional)')}</label><textarea id="e-plan" maxlength="2000" style="min-height:56px" placeholder="${L('例：大外刈の連絡技','e.g. Osoto-gari combinations')}"></textarea></div>
-    <div class="fld only-event"><label for="e-memo">${L('メモ','Notes')}</label><textarea id="e-memo" maxlength="2000" style="min-height:56px" placeholder="${L('持ち物・集合時間・出る生徒など','What to bring, meeting time, who’s going…')}">${esc(ev?.memo||'')}</textarea></div>
+    <div class="fld only-event"><label for="e-memo">${L('メモ','Notes')}</label><textarea id="e-memo" maxlength="2000" style="min-height:56px" placeholder="${L('持ち物・集合時間・出る生徒など','What to bring, meeting time, who’s going…')}">${esc(evx.memo||'')}</textarea></div>
     ${ev?`<button class="btn block ghost" data-act="delEvent" style="color:var(--due)">${L('この予定を消す','Delete this event')}</button>`:''}
     <div class="foot"><button class="btn block" data-act="saveEvent" id="e-save">${L('保存する','Save')}</button></div>`);
   refreshEv();
@@ -1228,7 +1240,8 @@ function saveEvent(scope){
     const title=g('e-title').value.trim()||evtName(E.type);
     const span=allDay&&g('e-edate').value>date?Math.round((parse(g('e-edate').value)-parse(date))/864e5):0;
     const newIds=[];
-    dates.forEach(d=>{const id=uid();newIds.push(id);S.events.push({id,type:E.type,title,date:d,time,dur,allDay,edate:span?addDays(d,span):'',place,memo:g('e-memo').value.trim(),seriesId:series})});
+    dates.forEach(d=>{const id=uid();newIds.push(id);const x={id,type:E.type,title,date:d,time,dur,allDay,edate:span?addDays(d,span):'',place,memo:g('e-memo').value.trim(),seriesId:series};if(E.pf){if(E.pf.info)x.info=E.pf.info;if(E.pf.files?.length)x.files=E.pf.files}S.events.push(x)});
+    if(E.pf)(E.pf.info?.deadlines||[]).forEach((dl,i)=>{if(E.dlSel.has(i)&&/^\d{4}-\d{2}-\d{2}$/.test(dl.date))S.events.push({id:uid(),type:'other',title:`${dl.label}（${title}）`,date:dl.date,time:'',dur:0,allDay:true,edate:'',place:'',memo:'',seriesId:null,deadline:true,parent:newIds[0]})});
     run(()=>{save();closeSheet();UI.anchor=date;render()},L('予定を入れました','Event added'),`${title} · ${rep||when(date,time)}`).then(()=>checkClashAfter(newIds));
   }
 }
@@ -1239,10 +1252,80 @@ function applyCarry(c,rec){
   c.pay={mode:'none'};c.cancel.carry='moved';c.cancel.to=rec.id;rec.from=c.id;
 }
 
+/* ---------- 案内から自動で入れる（Claude が読み取る・Edge Function my-schedule-ai） ---------- */
+const safeName=n=>n.replace(/[^\w.\-ぁ-んァ-ヶ一-龥ー]+/g,'_').slice(-80)||'file';
+async function shrinkImage(file){
+  if(!/^image\/(jpeg|png|webp|heic|heif)/.test(file.type)&&!/\.(heic|heif)$/i.test(file.name))return file;
+  try{const bmp=await createImageBitmap(file);const k=Math.min(1,2000/Math.max(bmp.width,bmp.height));
+    const c=document.createElement('canvas');c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+    const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.85));return blob?new File([blob],file.name.replace(/\.\w+$/,'')+'.jpg',{type:'image/jpeg'}):file}catch(e){return file}
+}
+async function uploadDoc(file){
+  const f=file.type==='application/pdf'||file.type==='text/plain'?file:await shrinkImage(file);
+  if(f.size>20*1024*1024)throw new Error(L(`${file.name} は大きすぎます（20MBまで）`,`${file.name} is too large (max 20 MB)`));
+  const path=`${SESSION.uid}/${today().slice(0,7)}/${uid()}-${safeName(f.name)}`;
+  const {error}=await sb.storage.from('ms-files').upload(path,f,{contentType:f.type||'application/octet-stream',upsert:false});
+  if(error)throw error;
+  return {path,name:f.name,mime:f.type,size:f.size};
+}
+function dropFiles(evs){
+  const paths=evs.flatMap(e=>(e.files||[]).map(f=>f.path)).filter(p=>!S.events.some(e=>(e.files||[]).some(f=>f.path===p)));
+  if(paths.length)sb.storage.from('ms-files').remove(paths).catch(()=>{});
+}
+function importForm(){
+  F.imp={files:[]};
+  openSheet(L('案内から自動で入れる','Fill in from a document'),`
+    <p class="hint" style="margin-top:0">${L('大会のPDF・チラシのスクショ・Webページやメールの文章を入れると、AIが大会名・日付・場所などを読み取って予定を作ります。まとめも一緒に保存されます。','Add a PDF, a flyer screenshot, or text from a web page or email. AI reads the name, dates and venue, and saves a summary with the event.')}</p>
+    <label class="drop" for="im-files">${L('PDF・画像を選ぶ（6つまで）','Choose PDFs or images (up to 6)')}<input type="file" id="im-files" accept="application/pdf,image/*" multiple></label>
+    <div id="im-list" class="chips" style="margin:8px 0 14px"></div>
+    <div class="fld"><label for="im-text">${L('または、文章を貼り付け','Or paste text')}</label><textarea id="im-text" maxlength="100000" style="min-height:120px" placeholder="${L('Webページやメールの内容をそのまま貼り付けてください','Paste the web page or email as is')}"></textarea></div>
+    <div class="foot"><button class="btn block" data-act="importRun" id="im-btn">${L('読み取る','Read it')}</button><div class="hint" style="text-align:center">${L('20〜60秒ほどかかります','Takes about 20–60 seconds')}</div></div>`);
+}
+function renderImpList(){g('im-list').innerHTML=F.imp.files.map((f,i)=>`<span class="tag">${esc(f.name)} <button class="del" data-act="impDel" data-v="${i}" aria-label="${L('外す','Remove')}">✕</button></span>`).join('')}
+async function importRun(){
+  const text=g('im-text').value.trim();
+  if(!text&&!F.imp.files.length){toast(L('ファイルを選ぶか、文章を貼り付けてください','Choose a file or paste text'));return}
+  const btn=g('im-btn');btn.disabled=true;
+  try{
+    btn.textContent=L('アップロード中…','Uploading…');
+    const metas=[];for(const f of F.imp.files)metas.push(await uploadDoc(f));
+    if(text)metas.push(await uploadDoc(new File([text],L('貼り付けた文章.txt','pasted-text.txt'),{type:'text/plain'})));
+    btn.textContent=L('AIが読み取り中…','AI is reading…');
+    const {data,error}=await sb.functions.invoke('my-schedule-ai',{body:{paths:metas.filter(m=>m.mime!=='text/plain').map(m=>m.path),text,lang:LANGV,today:today()}});
+    if(error){let code='';try{code=(await error.context.json()).error}catch(e){}throw new Error(aiErr(code))}
+    const r=data.result, okDate=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'');
+    const st=r.start_time&&/^\d\d:\d\d$/.test(r.start_time)?r.start_time:'', en=r.end_time&&/^\d\d:\d\d$/.test(r.end_time)?r.end_time:'';
+    const prefill={title:r.title,type:EVT.some(x=>x[0]===r.type)?r.type:'match',date:okDate(r.date)?r.date:today(),edate:okDate(r.end_date)&&r.end_date>r.date?r.end_date:'',
+      allDay:!!r.all_day||!st,time:st||'09:00',dur:st&&en&&toMin(en)>toMin(st)?toMin(en)-toMin(st):120,place:r.place||'',memo:r.address?L(`住所：${r.address}`,`Address: ${r.address}`):'',
+      info:{summary:String(r.summary||'').slice(0,4000),key:(r.key_points||[]).slice(0,30),deadlines:(r.deadlines||[]).filter(d=>okDate(d.date)).slice(0,8),uncertain:r.uncertain||'',at:today()},files:metas};
+    closeSheet();eventForm({kind:'event',prefill});
+  }catch(e){toast(L('読み取れませんでした','Couldn’t read it'),e.message);btn.disabled=false;btn.textContent=L('もう一度読み取る','Try again')}
+}
+function aiErr(code){return {'not signed in':L('ログインし直してください','Please sign in again'),'coach only':L('コーチのIDでログインしてください','Sign in with a coach ID'),no_key:L('AIの設定（APIキー）がまだです','The AI key isn’t set up yet'),bad_key:L('APIキーが正しくありません','The API key is not valid'),busy:L('混み合っています。少し待ってからもう一度','Busy. Please try again shortly'),refused:L('この内容は読み取れませんでした','This content couldn’t be processed'),empty:L('中身が空です','Nothing to read')}[code]||L('通信できませんでした。電波を確認してください','Connection problem. Check your signal')}
+function aiPreview(pf){const i=pf.info||{};
+  return `<div class="aibox"><span class="lbx">${L('AIが読み取りました。内容を確かめて保存してください','Read by AI. Check the details, then save')}</span>
+    ${i.uncertain?`<div class="warnbox" style="margin:0"><b>⚠ ${L('確認してください','Please check')}</b><br>${esc(i.uncertain)}</div>`:''}
+    ${i.summary?`<div class="sum">${esc(i.summary)}</div>`:''}
+    ${(i.deadlines||[]).length?`<div><span class="lbx">${L('締切なども予定に入れる','Also add deadlines')}</span>${i.deadlines.map((d,k)=>`<label class="check" style="font-weight:400"><input type="checkbox" class="dl-pick" data-i="${k}" checked> ${dl(d.date)} ${esc(d.label)}</label>`).join('')}</div>`:''}
+    ${(pf.files||[]).length?`<div class="hint">${L('保存するもの','Saved with the event')}: ${pf.files.map(f=>esc(f.name)).join(L('、',', '))}</div>`:''}</div>`}
+function infoCard(ev){const i=ev.info||{};
+  return `<div class="aibox"><span class="lbx">${L('大会のまとめ','Event summary')}</span>
+    ${i.summary?`<div class="sum">${esc(i.summary)}</div>`:''}
+    ${(i.key||[]).length?`<dl class="kv">${i.key.map(k=>`<dt>${esc(k.label)}</dt><dd>${esc(k.value)}</dd>`).join('')}</dl>`:''}
+    ${(i.deadlines||[]).length?`<div><span class="lbx">${L('締切・日程','Deadlines')}</span>${i.deadlines.map(d=>`<div style="font-size:14px">${dl(d.date)} ${esc(d.label)}</div>`).join('')}</div>`:''}
+    ${i.uncertain?`<div class="hint">⚠ ${esc(i.uncertain)}</div>`:''}
+    ${(ev.files||[]).length?`<div class="filerow">${ev.files.map(f=>`<button class="chip" data-act="openFile" data-v="${esc(f.path)}">${f.mime==='application/pdf'?'PDF':f.mime==='text/plain'?L('文章','Text'):L('画像','Image')}: ${esc(f.name)}</button>`).join('')}</div>`:''}</div>`}
+async function openFile(path){
+  const w=window.open('','_blank');
+  const {data,error}=await sb.storage.from('ms-files').createSignedUrl(path,600);
+  if(error||!data){if(w)w.close();toast(L('ファイルを開けませんでした','Couldn’t open the file'));return}
+  if(w)w.location=data.signedUrl;else location.href=data.signedUrl;
+}
+
 /* ---------- 予定の重なり（大会などとレッスン） ---------- */
 const evCovers=(e,date)=>e.date===date||(e.allDay&&e.edate&&e.date<=date&&date<=e.edate);
 function overlaps(e,l){
-  if(!evCovers(e,l.date))return false;
+  if(e.deadline||!evCovers(e,l.date))return false;
   if(e.allDay)return true;
   const a=toMin(e.time),b=a+(e.dur||0),c=toMin(l.time),d=c+(l.dur||0);
   return a<d&&c<b;
@@ -1337,7 +1420,7 @@ const cxWord=l=>isCoachSide(l.cancel)?L('予定変更','Rescheduled'):L('キャ�
 function cxWhy(l){const c=l.cancel||{};
   if(isCoachSide(c))return c.conflict?L(`${evtName(c.conflict.type)}「${c.conflict.title}」と重なった`,`Clashed with ${c.conflict.title} (${evtName(c.conflict.type)})`):L('自分の予定と重なった','Clashed with my schedule');
   return L(`${tReason(c.reason||'')}でキャンセル`,`Cancelled: ${tReason(c.reason||'')}`)}
-function conflictsOn(date,ex=[]){return S.events.filter(e=>(e.date===date||(e.allDay&&e.edate&&e.date<=date&&date<=e.edate))&&!ex.includes(e.id))}
+function conflictsOn(date,ex=[]){return S.events.filter(e=>!e.deadline&&(e.date===date||(e.allDay&&e.edate&&e.date<=date&&date<=e.edate))&&!ex.includes(e.id))}
 function conflictChips(date,cur,ex=[]){const evs=conflictsOn(date,ex);if(!evs.length)return `<div class="hint">${L('この日に入っている柔道の予定はありません。','No judo events on this day.')}</div>`;
   return `<div class="hint" style="margin-bottom:4px">${L('どの予定と重なりましたか','Which event?')}</div><div class="chips">${evs.map(e=>`<button class="chip typechip" style="--c:${evtColor(e.type)}" data-act="cxConf" data-id="${e.id}" aria-pressed="${cur===e.id}">${esc(e.title)}</button>`).join('')}<button class="chip" data-act="cxConf" data-id="" aria-pressed="${!cur}">${L('ほかの用事','Something else')}</button></div>`}
 const confOf=id=>{const e=S.events.find(x=>x.id===id);return e?{id:e.id,title:e.title,type:e.type}:null};
@@ -1555,10 +1638,14 @@ document.addEventListener('click',e=>{
     case 'saveEvent':saveEvent();break;
     case 'delEvent':{
       const later=laterInSeries(F.e.ev);
-      const doDel=sc=>{const ids=[F.e.ev.id,...(sc==='after'?later.map(x=>x.id):[])];S.events=S.events.filter(x=>!ids.includes(x.id));run(()=>{save();closeSheet();render()},L('予定を消しました','Event deleted'),ids.length>1?L(`${ids.length}件`,`${ids.length} events`):'')};
+      const doDel=sc=>{const ids=[F.e.ev.id,...(sc==='after'?later.map(x=>x.id):[])];const gone=S.events.filter(x=>ids.includes(x.id));S.events=S.events.filter(x=>!ids.includes(x.id));dropFiles(gone);run(()=>{save();closeSheet();render()},L('予定を消しました','Event deleted'),ids.length>1?L(`${ids.length}件`,`${ids.length} events`):'')};
       if(later.length){askScope('delete',later.length,doDel);return}
       if(!F.confirmDelE){F.confirmDelE=true;b.textContent=L('もう一度押すと消えます','Tap again to delete');return}
       F.confirmDelE=false;doDel('one');break}
+    case 'importOpen':closeSheet();importForm();break;
+    case 'importRun':importRun();break;
+    case 'impDel':F.imp.files.splice(+v,1);renderImpList();break;
+    case 'openFile':openFile(v);break;
     case 'clashOpen':clashForm([id]);break;
     case 'clashAll':{const on=v==='1';document.querySelectorAll('.cl-pick').forEach(x=>{x.checked=on;on?F.clash.sel.add(x.dataset.k):F.clash.sel.delete(x.dataset.k)});g('cl-btn').textContent=clashBtnLabel(F.clash.nm,F.clash.sel.size);break}
     case 'clashEvent':if(!F.clash.sel.size){toast(L('消すレッスンにチェックを入れてください','Check the lessons to remove'),L('どちらも残すなら「レッスンを優先する」','To keep both, choose “Lessons first”'));return}clashResolve(true);break;
@@ -1664,6 +1751,8 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
   const id=e.target.id;
+  if(id==='im-files'){F.imp.files=[...F.imp.files,...e.target.files].slice(0,6);e.target.value='';renderImpList()}
+  if(e.target.classList.contains('dl-pick')){const i=+e.target.dataset.i;e.target.checked?F.e.dlSel.add(i):F.e.dlSel.delete(i)}
   if(id==='f-book'){g('f-bookbox').hidden=!e.target.checked;g('f-bookhint').hidden=!e.target.checked}
   if(id==='k-paid')g('k-mbox').hidden=!e.target.checked;
   if(id==='f-date'&&g('f-bdate'))g('f-bdate').value=addDays(e.target.value,7);
