@@ -820,7 +820,7 @@ function stuDetail(){
           ${l.status==='cancelled'?`<div class="sub">${L(`${esc(tReason(l.cancel?.reason||''))}でキャンセル`,`Cancelled: ${esc(tReason(l.cancel?.reason||''))}`)}${l.plan?` (${L('予定','plan')}: ${esc(l.plan)})`:''}</div>`:''}
           ${l.gid?`<div class="sub">${L('ペア','Pair')}: ${esc(names(group(l).filter(x=>x.sid!==s.id)))}</div>`:''}
           ${l.waza.length?`<div class="chips" style="gap:4px">${l.waza.map(w=>`<span class="tag">${esc(tWaza(w))}</span>`).join('')}</div>`:''}
-          ${l.content?`<div class="lognote">${esc(l.content)}</div>`:''}
+          ${contentFor(l,s.id)?`<div class="lognote">${esc(contentFor(l,s.id))}</div>`:''}
           ${l.next?`<div class="sub" style="white-space:normal">→ ${L('次回','Next')}: ${esc(l.next)}</div>`:''}</div>${payPill(l)}</button>`).join(''):`<div class="empty">${L('まだ記録がありません。','No lessons logged yet.')}</div>`}
       </section>
     </div>
@@ -925,7 +925,7 @@ function lessonForm(l,preset={}){
       ${!isNew?`<button class="btn block ghost" data-act="delLesson" id="f-del" style="color:var(--due)">${L('このレッスンを消す','Delete this lesson')}</button>`:''}
     </div>
     <div class="foot"><button class="btn block" data-act="saveLesson" data-as="done">${base.status==='planned'||isNew?L('記録する（レッスンをした）','Log lesson (it happened)'):L('保存する','Save')}</button></div>`}`);
-  if(!canc)refreshForm();
+  if(!canc){refreshForm();fillPrefix()}
 }
 function refreshForm(){
   const n=F.sids.length;
@@ -955,6 +955,22 @@ function renderPay(){
         ${P.mode==='paid'?methodChips('fMethod',P.method,sid):`<div class="hint">${L('ホームの「まだいただいていない代金」に出ます（予定のうちは出ません）。','Shows under “Payments due” on Home (not while still scheduled).')}</div>`}`}</div>`}).join('');
 }
 /* 記録の画面で生徒（ペア）を選び直す */
+/* ペアのときは「やったこと」に生徒の名前を1行ずつ入れておく（例：De: ／ Liz: ） */
+const namePrefix=sid=>shortName(stu(sid).name).trim();
+const prefixLines=sids=>sids.length>1?sids.map(id=>namePrefix(id)+': ').join('\n'):'';
+const onlyPrefix=t=>!t.trim()||t.split('\n').every(l=>!l.trim()||/^[^:：\n]{1,40}[:：]\s*$/.test(l));
+function fillPrefix(){const ta=g('f-content');if(ta&&onlyPrefix(ta.value))ta.value=prefixLines(F.sids)}
+/* 生徒ごとの履歴では、その子の行だけを見せる（名前のない行はそのまま） */
+function contentFor(l,sid){
+  const grp=group(l);if(grp.length<2||!l.content)return l.content;
+  const mine=namePrefix(sid), others=grp.filter(x=>x.sid!==sid).map(x=>namePrefix(x.sid));
+  const pre=(line,n)=>line.startsWith(n+':')||line.startsWith(n+'：');
+  const lines=l.content.split('\n');
+  if(!lines.some(x=>pre(x,mine)||others.some(o=>pre(x,o))))return l.content;
+  let skip=false;const out=[];
+  lines.forEach(x=>{if(others.some(o=>pre(x,o))){skip=true;return}if(pre(x,mine)){skip=false;out.push(x.slice(mine.length+1).trim());return}if(!skip)out.push(x)});
+  return out.join('\n').trim();
+}
 function setFSids(ids){
   F.sids=ids;
   document.querySelectorAll('[data-act="fStu"]').forEach(x=>x.setAttribute('aria-pressed',F.sids.includes(x.dataset.id)));
@@ -965,6 +981,7 @@ function setFSids(ids){
   F.sids.forEach(x=>{if(F.isNew&&!F.carry[x]&&pendingOf(x)[0])F.carry[x]=pendingOf(x)[0].id});
   Object.keys(F.carry).forEach(x=>{if(!F.sids.includes(x))delete F.carry[x]});
   refreshForm();
+  fillPrefix();
 }
 function recalcAmounts(){const d=durOf('f')||60;F.sids.forEach(sid=>{F.pay[sid].amount=priceFor(sid,d,F.sids.length)});}
 
@@ -984,7 +1001,7 @@ function saveLesson(as,scope){
   const shift=first?dayDiff(first.date,date):0;
   const gid=F.sids.length>1?(F.gid||uid()):null;
   Object.entries(F.ids).forEach(([sid,id])=>{if(!F.sids.includes(sid))S.lessons=S.lessons.filter(l=>l.id!==id)});
-  const shared={date,time,dur,status,gid,place,waza:[...F.waza],content:g('f-content').value.trim(),next:g('f-next').value.trim(),plan:g('f-plan').value.trim()};
+  const shared={date,time,dur,status,gid,place,waza:[...F.waza],content:onlyPrefix(g('f-content').value)?'':g('f-content').value.trim(),next:g('f-next').value.trim(),plan:g('f-plan').value.trim()};
   const saved=[];
   F.sids.forEach(sid=>{
     const id=F.ids[sid]||uid(), old=byId(id);
@@ -1482,6 +1499,8 @@ document.addEventListener('click',e=>{
       if(navigator.clipboard)navigator.clipboard.writeText(ta.value).then(()=>toast(L('✓ コピーしました','✓ Copied'))).catch(fb);else fb();break}
   }
 });
+/* 名前だけ入っている欄を押したら、1行目の名前のうしろにカーソルを置く */
+document.addEventListener('focusin',e=>{const t=e.target;if(t.id==='f-content'&&F.sids?.length>1&&onlyPrefix(t.value)&&t.value){const p=t.value.indexOf('\n');setTimeout(()=>t.setSelectionRange(p<0?t.value.length:p,p<0?t.value.length:p),0)}});
 document.addEventListener('input',e=>{
   if(e.target.classList.contains('f-amount'))F.pay[e.target.dataset.sid].amount=e.target.value;
 });
