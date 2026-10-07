@@ -328,7 +328,7 @@ const dow=s=>L(DOW,DOW_EN)[parse(s).getDay()];
 const dl=s=>L(`${md(s)}(${dow(s)})`,`${dow(s)} ${md(s)}`);
 const ymTitle=(y,m)=>L(`${y}年${m}月`,new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}));
 const mShort=m=>L(`${m}月`,new Date(2000,m-1,1).toLocaleDateString('en-US',{month:'short'}));
-const money=n=>'$'+Number(n||0).toLocaleString('en-US');
+const money=n=>'$'+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2});
 const uid=()=>Math.random().toString(36).slice(2,10);
 const toMin=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+(m||0)};
 const fromMin=n=>{n=Math.max(0,Math.min(n,23*60+55));return `${pad(Math.floor(n/60))}:${pad(n%60)}`};
@@ -523,16 +523,27 @@ function projection(month){
   const unpaid=inM.filter(isUnpaid).reduce((a,l)=>a+ +l.pay.amount,0);
   const plannedL=inM.filter(l=>l.status==='planned');
   const planned=plannedL.filter(l=>l.pay.mode==='per'&&!l.pay.paid).reduce((a,l)=>a+ +l.pay.amount,0);
+  const plannedPackAmt=plannedL.filter(l=>l.pay.mode==='ticket').reduce((a,l)=>a+plannedShare(l),0);
   const plannedPack=dedupe(plannedL.filter(l=>l.pay.mode==='ticket')).length;
   const plannedCount=dedupe(plannedL).length;
   const doneCount=dedupe(inM.filter(l=>l.status==='done')).length;
-  return {got,unpaid,planned,plannedPack,plannedCount,doneCount,total:got+unpaid+planned};
+  return {got,unpaid,planned:planned+plannedPackAmt,plannedPack,plannedCount,doneCount,total:got+unpaid+planned+plannedPackAmt};
 }
+/* 回数券1回分の金額（割り切れない端数は最後の回で調整） */
+function packShare(p,n){const base=Math.floor(p.price/p.count*100)/100;return n>=p.count?Math.round((p.price-base*(p.count-1))*100)/100:base}
+/* 予定の回数券レッスンが、その回数券の何回目になるか（予定の日付順）で1回分を出す */
+function plannedShare(l){const p=S.packages.find(x=>x.id===l.pay.pid);if(!packValue(p))return 0;
+  const q=sortL(S.lessons.filter(x=>x.status==='planned'&&x.pay.mode==='ticket'&&x.pay.pid===p.id));const n=used(p.id)+q.indexOf(l)+1;return n>p.count?0:packShare(p,n)}
+const packValue=p=>p&&p.paid&&!p.prior?Math.round(p.price/p.count*100)/100:0;
+/* 回数券の前受け金（受け取り済みで、まだレッスンをしていない分） */
+const packBalance=()=>S.packages.filter(p=>p.paid&&!p.prior).reduce((a,p)=>a+Math.max(0,left(p))*p.price/p.count,0);
 /* お金の流れ：受け取った日で数える */
 function income(){
   const rows=[];
   S.lessons.forEach(l=>{if(l.pay.mode==='per'&&l.pay.paid&&!l.pay.prior)rows.push({date:l.pay.paidOn||l.date,sid:l.sid,kind:l.status==='cancelled'?L('キャンセル料','Cancellation fee'):l.gid?L('ペアレッスン','Pair lesson'):L('レッスン','Lesson'),lessonDate:l.date,amount:+l.pay.amount,method:l.pay.method})});
-  S.packages.forEach(p=>{if(p.paid&&!p.prior)rows.push({date:p.paidOn||p.date,sid:p.sid,kind:L(`回数券 ${p.count}回`,`${p.count}-lesson pack`),lessonDate:'',amount:+p.price,method:p.method})});
+  /* 回数券は、買った日に全額ではなく、レッスンをした日に1回分ずつ数える（本人の方針） */
+  S.lessons.forEach(l=>{if(l.status!=='done'||l.pay.mode!=='ticket')return;const p=S.packages.find(x=>x.id===l.pay.pid);if(!p||!p.paid||p.prior)return;
+    const n=ticketNo(l);rows.push({date:l.date,sid:l.sid,kind:L(`回数券 ${n}/${p.count}回目`,`Pack lesson ${n}/${p.count}`),lessonDate:l.date,amount:packShare(p,n),method:p.method})});
   return rows.sort((a,b)=>a.date.localeCompare(b.date));
 }
 
@@ -701,7 +712,7 @@ function blk(it){
 function lessonMoneyTag(l){
   if(l.status==='cancelled')return '';
   const grp=group(l), per=grp.filter(x=>x.pay.mode==='per');
-  if(!per.length)return ' · '+L('回数券','pack');
+  if(!per.length){const v=grp.reduce((a,x)=>a+packValue(S.packages.find(p=>p.id===x.pay.pid)),0);return ' · '+L('回数券','pack')+(v?' '+money(v):'')}
   return ' · '+money(per.reduce((a,x)=>a+ +x.pay.amount,0));
 }
 function viewDays(){
@@ -849,14 +860,15 @@ function moneyView(){
     <div class="bars" role="img" aria-label="${L('直近6か月の受け取りと見込み','Received and expected over the last 6 months')}">${months.map((k,i)=>{const rest=pjs[i].total-sums[i];return `<div class="${k===UI.month?'cur':''}"><em>${pjs[i].total?money(pjs[i].total):''}</em>${rest>0?`<i class="proj" style="height:${rest/max*100}%"></i>`:''}<i class="got" style="height:${sums[i]/max*100}%"></i></div>`}).join('')}</div>
     <div class="blabels">${months.map(k=>`<span>${mShort(+k.slice(5))}</span>`).join('')}</div>
     <div class="legend"><span><i class="m" style="background:var(--accent)"></i>${L('受け取り済み','Received')}</span><span><i class="m" style="background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)"></i>${L('まだの分・これからの予定','Still to come')}</span></div>
-    <p class="hint" style="margin:10px 0 0">${L('受け取りは代金を受け取った日の月に数えます（回数券はまとめて、その月に）。','Received is counted in the month the money came in (packs count in full that month).')}</p>
+    <p class="hint" style="margin:10px 0 0">${L('受け取りは代金を受け取った日の月に数えます。回数券は、レッスンをした日に1回分ずつ数えます。','Received is counted in the month the money came in. Packs count one lesson at a time, on the day of each lesson.')}</p>
   </section>
   <section class="card projcard" style="margin-bottom:14px"><h2>${L(`${m}月の見込み`,`Expected · ${ymTitle(y,m)}`)} <b>${money(PJ.total)}</b></h2>
     <div class="line"><span>${L('受け取り済み','Received')}</span><b>${money(PJ.got)}</b></div>
     <div class="line"><span>${L(`レッスンをしたが未払い`,`Held, not yet paid`)}</span><b>${money(PJ.unpaid)}</b></div>
     <div class="line"><span>${L(`これからの予定（${PJ.plannedCount}回）`,`Scheduled (${PJ.plannedCount})`)}</span><b>${money(PJ.planned)}</b></div>
     <div class="line total"><span>${L('見込みの合計','Expected total')}</span><b>${money(PJ.total)}</b></div>
-    ${PJ.plannedPack?`<p class="hint" style="margin:6px 0 0">${L(`回数券で受ける予定が ${PJ.plannedPack}回あります（代金は回数券を買ったときに数えています）。`,`${PJ.plannedPack} scheduled lesson(s) use a pack (counted when the pack was bought).`)}</p>`:''}
+    ${PJ.plannedPack?`<p class="hint" style="margin:6px 0 0">${L(`これからの予定には、回数券で受ける ${PJ.plannedPack}回分（1回分ずつ）も入っています。`,`Scheduled includes ${PJ.plannedPack} pack lesson(s), one lesson’s share each.`)}</p>`:''}
+    ${packBalance()>0?`<p class="hint" style="margin:6px 0 0">${L(`回数券の前受け金（受け取り済みで、まだレッスンしていない分）：${money(packBalance())}`,`Pack balance (paid, lessons not yet held): ${money(packBalance())}`)}</p>`:''}
     ${plist.length?`<details style="margin-top:8px" ${cur||future?'open':''}><summary class="hint" style="cursor:pointer">${L('まだの分の内訳','What’s still to come')}</summary>${plist.map(l=>lessonRow(l,true)).join('')}</details>`:''}
   </section>
   <div class="grid2">
@@ -1460,7 +1472,7 @@ document.addEventListener('click',e=>{
       if(paid){p.paidOn=p.date;if(g('k-prior').checked)p.prior=true}
       S.packages.push(p);
       S.lessons.forEach(l=>{if(l.sid===p.sid&&l.status==='planned'&&!l.gid&&!(l.pay.mode==='per'&&l.pay.paid)&&l.pay.mode!=='ticket')l.pay={mode:'ticket',pid:p.id}});
-      run(()=>{save();closeSheet();render()},L(`${p.count}回券を追加しました`,`Added a ${p.count}-lesson pack`),paid?(p.prior?L('以前に受け取った分（売上には入れません）','Received before (not counted in income)'):`${money(p.price)}`):L('未払いとしてホームに出ます','Shows on Home as payment due'));break}
+      run(()=>{save();closeSheet();render()},L(`${p.count}回券を追加しました`,`Added a ${p.count}-lesson pack`),paid?(p.prior?L('以前に受け取った分（売上には入れません）','Received before (not counted in income)'):L(`${money(p.price)}・売上にはレッスンのたびに1回分（${money(p.price/p.count)}）ずつ入ります`,`${money(p.price)} · counted ${money(p.price/p.count)} per lesson`)):L('未払いとしてホームに出ます','Shows on Home as payment due'));break}
     case 'receive':receiveForm('stu',sid);break;
     case 'receivePkg':receiveForm('pkg',id);break;
     case 'recvPick':{const on=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',on);F.recv.ids=on?[...F.recv.ids,id]:F.recv.ids.filter(x=>x!==id);
@@ -1469,7 +1481,7 @@ document.addEventListener('click',e=>{
       const r=F.recv,t=g('r-pdate').value||today(),prior=g('r-prior').checked;let sum=0;
       if(r.kind==='stu'){if(!r.ids.length){toast(L('受け取った回を選んでください','Pick the lessons paid for'));return}r.ids.forEach(i=>{const l=byId(i);Object.assign(l.pay,{paid:true,method:F.method,paidOn:t,prior});sum+= +l.pay.amount})}
       else{const p=S.packages.find(x=>x.id===r.id);Object.assign(p,{paid:true,method:F.method,paidOn:t,prior});sum=p.price}
-      run(()=>{save();closeSheet();render()},recvLabel(sum),prior?L('以前に受け取った分として記録しました（売上には入れません）','Recorded as received before (not counted in income)'):t!==today()?L(`${md(t)} に受け取った分として、${+t.slice(5,7)}月の売上に入れました`,`Counted in ${ymTitle(+t.slice(0,4),+t.slice(5,7))} income`):L('ありがとうございました','Thank you'));break}
+      run(()=>{save();closeSheet();render()},recvLabel(sum),r.kind==='pkg'&&!prior?L('売上には、レッスンをした日に1回分ずつ入ります','Counted in income one lesson at a time'):prior?L('以前に受け取った分として記録しました（売上には入れません）','Recorded as received before (not counted in income)'):t!==today()?L(`${md(t)} に受け取った分として、${+t.slice(5,7)}月の売上に入れました`,`Counted in ${ymTitle(+t.slice(0,4),+t.slice(5,7))} income`):L('ありがとうございました','Thank you'));break}
     case 'pdateLesson':g(b.dataset.p+'-pdate').value=v;break;
     case 'fStu':{
       const on=!F.sids.includes(id);
