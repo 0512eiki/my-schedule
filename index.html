@@ -301,12 +301,12 @@ let LANGV='ja';
 const L=(ja,en)=>LANGV==='en'?en:ja;
 const DOW=['日','月','火','水','木','金','土'], DOW_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], DOW_LONG=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const METHOD_EN={'現金':'Cash','その他':'Other'};
-const REASON_EN={'生徒の都合':'Student conflict','体調不良':'Illness','こちらの都合':'Coach conflict','天候':'Weather','その他':'Other'};
+const REASON_EN={'生徒の都合':'Student conflict','体調不良':'Illness','こちらの都合':'Clashed with my schedule','天候':'Weather','その他':'Other'};
 const WAZA_EN={'大外刈':'Osoto-gari','大内刈':'Ouchi-gari','小内刈':'Kouchi-gari','内股':'Uchi-mata','払腰':'Harai-goshi','背負投':'Seoi-nage','体落':'Tai-otoshi','袖釣込腰':'Sode-tsurikomi-goshi','小外刈':'Kosoto-gari','出足払':'Deashi-harai','巴投':'Tomoe-nage',
   '袈裟固':'Kesa-gatame','横四方固':'Yoko-shiho-gatame','上四方固':'Kami-shiho-gatame','縦四方固':'Tate-shiho-gatame','腕挫十字固':'Juji-gatame','送襟絞':'Okuri-eri-jime','寝技の返し':'Ne-waza turnovers',
   '受身':'Ukemi','打ち込み':'Uchikomi','乱取り':'Randori','組み手':'Grip fighting','体力づくり':'Conditioning','試合の作戦':'Match strategy'};
 const WAZA_GROUP_EN={'立ち技':'Standing (nage-waza)','寝技':'Groundwork (ne-waza)','その他':'Other'};
-const tMethod=m=>L(m,METHOD_EN[m]||m), tReason=r=>L(r,REASON_EN[r]||r), tWaza=w=>L(w,WAZA_EN[w]||w);
+const tMethod=m=>L(m,METHOD_EN[m]||m), tReason=r=>L(r==='こちらの都合'?'自分の予定と重なった':r,REASON_EN[r]||r), tWaza=w=>L(w,WAZA_EN[w]||w);
 const EVT=[['practice','練習','Practice','--t-practice'],['match','試合・大会','Tournament','--t-match'],['referee','審判','Refereeing','--t-ref'],['seminar','講習会','Clinic','--t-sem'],['exam','昇段審査','Promotion exam','--t-exam'],['travel','遠征','Travel','--t-travel'],['other','その他','Other','--t-other']];
 const evtInfo=t=>EVT.find(x=>x[0]===t)||EVT[6];
 const evtName=t=>{const e=evtInfo(t);return L(e[1],e[2])};
@@ -315,7 +315,7 @@ const evtColor=t=>`var(${evtInfo(t)[3]})`;
 /* ---------- データ ---------- */
 const COLORS=['#34449a','#b5542b','#1d845a','#7a4bb0','#0f7f8c','#a3367a','#5f6b1e'];
 const METHODS=['現金'];   // 本人の方針：代金は現金だけ（選ぶ欄は出さない）
-const REASONS=['生徒の都合','体調不良','こちらの都合','天候','その他'];
+const REASONS=['生徒の都合','体調不良','天候','その他','こちらの都合'];
 const WAZA={'立ち技':['大外刈','大内刈','小内刈','内股','払腰','背負投','体落','袖釣込腰','小外刈','出足払','巴投'],'寝技':['袈裟固','横四方固','上四方固','縦四方固','腕挫十字固','送襟絞','寝技の返し'],'その他':['受身','打ち込み','乱取り','組み手','体力づくり','試合の作戦']};
 
 const pad=n=>String(n).padStart(2,'0');
@@ -589,10 +589,10 @@ function stateOf(l){
 function payPill(l){
   if(l.status==='cancelled'){
     const c=l.cancel||{};
-    if(c.carry==='moved'){const t=byId(c.to);return `<span class="pill off">${L('キャンセル','Cancelled')} → ${t?md(t.date):L('振替','make-up')}</span>`}
-    if(c.carry==='pending')return `<span class="pill warn">${L('キャンセル・振替待ち','Cancelled · make-up TBD')}</span>`;
+    if(c.carry==='moved'){const t=byId(c.to);return `<span class="pill off">${cxWord(l)} → ${t?md(t.date):L('振替','make-up')}</span>`}
+    if(c.carry==='pending')return `<span class="pill warn">${cxWord(l)}${L('・振替待ち',' · make-up TBD')}</span>`;
     if(l.pay.mode==='per'&&+l.pay.amount>0)return `<span class="pill ${l.pay.paid?'off':'due'}">${L('キャンセル料','Cancel fee')} ${money(l.pay.amount)}</span>`;
-    return `<span class="pill off">${L('キャンセル','Cancelled')}</span>`;
+    return `<span class="pill off">${cxWord(l)}</span>`;
   }
   if(l.status==='planned')return `<span class="pill plan">${l.pay.mode==='ticket'?L('予定・回数券','Scheduled · pack'):l.pay.mode==='per'&&l.pay.paid?L(`予定・前払い済み ${money(l.pay.amount)}`,`Scheduled · prepaid ${money(l.pay.amount)}`):`${L('予定','Scheduled')} ${money(l.pay.amount)}`}</span>`;
   if(l.pay.mode==='ticket'){const p=S.packages.find(x=>x.id===l.pay.pid);return `<span class="pill ticket">${L('回数券','Pack')} ${ticketNo(l)}/${p?p.count:'?'}</span>`}
@@ -603,7 +603,7 @@ function lessonRow(l,showDate=true,onlySid=null){
   const grp=onlySid?[l]:group(l);
   const s=stu(l.sid);
   let sub;
-  if(l.status==='cancelled')sub=L(`${tReason(l.cancel?.reason||'')}でキャンセル`,`Cancelled: ${tReason(l.cancel?.reason||'')}`)+(l.plan?` ｜ ${L('予定','Plan')}: ${l.plan}`:'');
+  if(l.status==='cancelled')sub=cxWhy(l)+(l.plan?` ｜ ${L('予定','Plan')}: ${l.plan}`:'');
   else if(l.status==='planned')sub=l.plan?`${L('予定','Plan')}: ${l.plan}`:`${l.time}– ${l.dur}${L('分',' min')}`;
   else sub=(l.waza.length?l.waza.map(tWaza).join(L('・',', ')):'')+(l.content?` ｜ ${l.content}`:'');
   const pair=!onlySid&&grp.length>1;
@@ -648,7 +648,7 @@ function home(){
     </div>
     <div style="display:grid;gap:14px">
       <section class="card"><h2>${L('まだいただいていない代金','Payments due')} <b>${money(dueTotal)}</b></h2>${dueHtml||`<div class="empty">${L('未払いはありません。','Nothing unpaid.')}</div>`}</section>
-      ${pend.length?`<section class="card"><h2>${L('振替の日にちが決まっていない','Make-ups to schedule')}</h2>${pend.map(l=>{const s=stu(l.sid);return `<div class="row"><div class="avatar" style="background:${s.color}">${esc(s.name[0])}</div><div class="what"><div class="nm">${esc(s.name)}</div><div class="sub">${dl(l.date)} ${L(`${tReason(l.cancel.reason)}でキャンセル`,`cancelled (${tReason(l.cancel.reason)})`)}${l.pay.mode==='ticket'?L('・回数券は減っていません',' · pack not used'):l.pay.paid?L('・前払い済み',' · prepaid'):''}</div></div><button class="btn sm" data-act="schedCarry" data-id="${l.id}">${L('日にちを決める','Schedule')}</button></div>`}).join('')}<p class="hint" style="margin:8px 0 0">${L('次にその生徒のレッスンを入れると、自動でこの振替として扱います。','The next lesson you add for that student is automatically treated as the make-up.')}</p></section>`:''}
+      ${pend.length?`<section class="card"><h2>${L('振替の日にちが決まっていない','Make-ups to schedule')}</h2>${pend.map(l=>{const s=stu(l.sid);return `<div class="row"><div class="avatar" style="background:${s.color}">${esc(s.name[0])}</div><div class="what"><div class="nm">${esc(s.name)}</div><div class="sub">${dl(l.date)} ${esc(cxWhy(l))}${l.pay.mode==='ticket'?L('・回数券は減っていません',' · pack not used'):l.pay.paid?L('・前払い済み',' · prepaid'):''}</div></div><button class="btn sm" data-act="schedCarry" data-id="${l.id}">${L('日にちを決める','Schedule')}</button></div>`}).join('')}<p class="hint" style="margin:8px 0 0">${L('次にその生徒のレッスンを入れると、自動でこの振替として扱います。','The next lesson you add for that student is automatically treated as the make-up.')}</p></section>`:''}
       ${low.length?`<section class="card"><h2>${L('回数券の残りが少ない生徒','Packs running low')}</h2>${low.map(({s,rem})=>`<button class="row" data-act="openStu" data-id="${s.id}"><div class="avatar" style="background:${s.color}">${esc(s.name[0])}</div><div class="what"><div class="nm">${esc(s.name)}</div><div class="sub">${L('次の回数券のご案内を','Time to offer the next pack')}</div></div><span class="pill warn">${L(`残り ${rem}回`,`${rem} left`)}</span></button>`).join('')}</section>`:''}
     </div>
   </div>`;
@@ -815,7 +815,7 @@ function stuDetail(){
         ${closed.length?`<button class="back" style="margin:10px 0 0;font-size:13px" data-act="toggleDone">${UI.showDone?'▾':'▸'} ${L(`やったこと ${closed.length}件`,`Done (${closed.length})`)}</button>${UI.showDone?closed.slice().reverse().map(t=>`<div class="todo done"><input type="checkbox" checked data-act="todoToggle" data-id="${t.id}" aria-label="${L('まだにもどす','Mark as not done')}"><span class="tx">${esc(t.text)}${t.doneOn?` <span class="hint">${md(t.doneOn)}</span>`:''}</span></div>`).join(''):''}`:''}
       </section>
       <section class="card"><h2>${L('これからの予定','Upcoming')} <button class="btn sm ghost" data-act="newEvent" data-sid="${s.id}">${L('＋ 予定を入れる','＋ Schedule')}</button></h2>
-        ${pend.map(l=>`<div class="row"><div class="when"><b>${md(l.date)}</b><span>${L('キャンセル','Cancelled')}</span></div><div class="what"><div class="nm">${L('振替の日にちが未定','Make-up not scheduled')}</div><div class="sub">${esc(l.plan||tReason(l.cancel.reason))}</div></div><button class="btn sm" data-act="schedCarry" data-id="${l.id}">${L('日にちを決める','Schedule')}</button></div>`).join('')}
+        ${pend.map(l=>`<div class="row"><div class="when"><b>${md(l.date)}</b><span>${cxWord(l)}</span></div><div class="what"><div class="nm">${L('振替の日にちが未定','Make-up not scheduled')}</div><div class="sub">${esc(cxWhy(l))}${l.plan?' ｜ '+esc(l.plan):''}</div></div><button class="btn sm" data-act="schedCarry" data-id="${l.id}">${L('日にちを決める','Schedule')}</button></div>`).join('')}
         ${future.length?future.map(l=>`<div class="row" style="align-items:flex-start"><div class="when"><b>${md(l.date)}</b><span>${dow(l.date)} ${l.time}</span></div>
           <button class="what" data-act="openLesson" data-id="${l.id}" style="border:0;background:none;text-align:left;padding:0"><div class="nm">${l.gid?esc(names(group(l)))+`<span class="type">${L('ペア','Pair')}</span>`:`${l.dur}${L('分',' min')}`}${l.from?`<span class="type">${L('振替','Make-up')}</span>`:''}</div><div class="planbox ${l.plan?'':'hint'}">${l.plan?esc(l.plan):L('やる予定の内容を書く','Write a lesson plan')}</div></button>
           <button class="btn sm danger" data-act="cancelOpen" data-id="${l.id}">${L('キャンセル','Cancel')}</button></div>`).join(''):(pend.length?'':`<div class="empty">${L('予定はありません。','Nothing scheduled.')}</div>`)}
@@ -829,7 +829,7 @@ function stuDetail(){
       <section class="card"><h2>${L('よく練習している技','Most practiced')}</h2>${top.length?`<div class="chips">${top.map(([w,c])=>`<span class="tag">${esc(tWaza(w))} <span class="num">${c}</span></span>`).join('')}</div>`:`<div class="empty">${L('記録が増えるとここに出ます。','Shows up as you log lessons.')}</div>`}</section>
       <section class="card"><h2>${L('これまでのレッスン','Lesson history')} <button class="btn sm ghost" data-act="newLesson" data-sid="${s.id}">${L('＋ 記録','＋ Log')}</button></h2>
         ${past.length?past.map(l=>`<button class="row" data-act="openLesson" data-id="${l.id}" style="align-items:flex-start"><div class="when"><b>${md(l.date)}</b><span>${dow(l.date)}</span></div><div class="what">
-          ${l.status==='cancelled'?`<div class="sub">${L(`${esc(tReason(l.cancel?.reason||''))}でキャンセル`,`Cancelled: ${esc(tReason(l.cancel?.reason||''))}`)}${l.plan?` (${L('予定','plan')}: ${esc(l.plan)})`:''}</div>`:''}
+          ${l.status==='cancelled'?`<div class="sub">${esc(cxWhy(l))}${l.plan?` (${L('予定','plan')}: ${esc(l.plan)})`:''}</div>`:''}
           ${l.gid?`<div class="sub">${L('ペア','Pair')}: ${esc(names(group(l).filter(x=>x.sid!==s.id)))}</div>`:''}
           ${l.waza.length?`<div class="chips" style="gap:4px">${l.waza.map(w=>`<span class="tag">${esc(tWaza(w))}</span>`).join('')}</div>`:''}
           ${contentFor(l,s.id)?`<div class="lognote">${esc(contentFor(l,s.id))}</div>`:''}
@@ -852,12 +852,12 @@ function moneyView(){
   const mr=rows.filter(r=>r.date.startsWith(UI.month));
   const total=mr.reduce((a,r)=>a+r.amount,0);
   const cnt=dedupe(done().filter(l=>l.date.startsWith(UI.month))).length;
-  const canc=dedupe(S.lessons.filter(l=>l.status==='cancelled'&&l.date.startsWith(UI.month))).length;
+  const cl=dedupe(S.lessons.filter(l=>l.status==='cancelled'&&l.date.startsWith(UI.month))), canc=cl.filter(l=>!isCoachSide(l.cancel)).length, resch=cl.length-canc;
   const by={};mr.forEach(r=>{by[r.sid]=(by[r.sid]||0)+r.amount});
   const meth={};mr.forEach(r=>{const k=r.method?tMethod(r.method):'—';meth[k]=(meth[k]||0)+r.amount});
   return `<section class="card" style="margin-bottom:14px">
     <div class="calhead"><button data-act="monMove" data-v="-1" aria-label="${L('前の月','Previous month')}">‹</button><h3>${L(`${y}年${m}月の受け取り`,`Received · ${ymTitle(y,m)}`)}</h3><button data-act="monMove" data-v="1" aria-label="${L('次の月','Next month')}">›</button></div>
-    <div class="kpis" style="margin:10px 0 4px"><div class="kpi"><span>${L('受け取り','Received')}</span><b>${money(total)}</b></div><div class="kpi"><span>${L('レッスン','Lessons')}</span><b>${cnt}</b></div><div class="kpi"><span>${L('キャンセル','Cancelled')}</span><b>${canc}</b></div></div>
+    <div class="kpis" style="margin:10px 0 4px"><div class="kpi"><span>${L('受け取り','Received')}</span><b>${money(total)}</b></div><div class="kpi"><span>${L('レッスン','Lessons')}</span><b>${cnt}</b></div><div class="kpi"><span>${L('キャンセル／予定変更','Cancelled / rescheduled')}</span><b>${canc} / ${resch}</b></div></div>
     <div class="bars" role="img" aria-label="${L('直近6か月の受け取りと見込み','Received and expected over the last 6 months')}">${months.map((k,i)=>{const rest=pjs[i].total-sums[i];return `<div class="${k===UI.month?'cur':''}"><em>${pjs[i].total?money(pjs[i].total):''}</em>${rest>0?`<i class="proj" style="height:${rest/max*100}%"></i>`:''}<i class="got" style="height:${sums[i]/max*100}%"></i></div>`}).join('')}</div>
     <div class="blabels">${months.map(k=>`<span>${mShort(+k.slice(5))}</span>`).join('')}</div>
     <div class="legend"><span><i class="m" style="background:var(--accent)"></i>${L('受け取り済み','Received')}</span><span><i class="m" style="background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)"></i>${L('まだの分・これからの予定','Still to come')}</span></div>
@@ -917,7 +917,7 @@ function lessonForm(l,preset={}){
   const canc=base.status==='cancelled';
   const to=canc&&l.cancel?.to?byId(l.cancel.to):null;
   openSheet(title,`
-    ${canc?`<div class="prev"><b>${L(`キャンセル（${esc(tReason(l.cancel?.reason||''))}）`,`Cancelled (${esc(tReason(l.cancel?.reason||''))})`)}</b>${l.cancel?.carry==='moved'&&to?L(`振替：${dl(to.date)} に繰り越し済み`,`Moved to the make-up on ${dl(to.date)}`):l.cancel?.carry==='pending'?L('振替の日にちはまだ決まっていません。','Make-up not scheduled yet.'):L('繰り越しなし','Not carried over')}</div>
+    ${canc?`<div class="prev"><b>${cxWord(l)}（${esc(cxWhy(l))}）</b>${l.cancel?.carry==='moved'&&to?L(`振替：${dl(to.date)} に繰り越し済み`,`Moved to the make-up on ${dl(to.date)}`):l.cancel?.carry==='pending'?L('振替の日にちはまだ決まっていません。','Make-up not scheduled yet.'):L('繰り越しなし','Not carried over')}</div>
       <div style="display:grid;gap:10px">${l.cancel?.carry==='pending'?`<button class="btn block" data-act="schedCarry" data-id="${l.id}">${L('振替の日にちを決める','Schedule the make-up')}</button>`:''}<button class="btn block ghost" data-act="uncancel" data-id="${l.id}">${L('キャンセルを取り消す（予定に戻す）','Undo cancel (back to scheduled)')}</button><button class="btn block danger" data-act="delLesson" id="f-del">${L('この記録を消す','Delete this record')}</button></div>`:`
     ${base.status==='planned'&&!isNew?`<div class="prev"><b>${L('予定','Scheduled')}${l.from?L('（振替）',' (make-up)'):''}${l.seriesId&&laterLessons(Object.values(F.ids)).length?` ↻ ${L('繰り返し','repeating')}`:''}</b>${L('終わったら内容を書いて「記録する」。来られなくなったら下の「キャンセルにする」。','After the lesson, add notes and tap “Log lesson”. If it’s off, use “Cancel lesson” below.')}</div>`:''}
     <div class="fld"><span class="lb">${L('生徒','Student')} <span class="hint" style="font-weight:400">— ${L('2人選ぶとペアになります','pick two for a pair lesson')}</span></span><div id="f-pairs">${pairChips('fPair',sids)}</div><div class="chips" id="f-stu">${studentsSorted().map(x=>`<button class="chip" data-act="fStu" data-id="${x.id}" aria-pressed="${sids.includes(x.id)}">${esc(x.name)}</button>`).join('')}</div><div class="hint" id="f-type"></div></div>
@@ -940,7 +940,8 @@ function lessonForm(l,preset={}){
 
       ${isNew?`<button class="btn block ghost" data-act="saveLesson" data-as="planned">${L('予定として入れる（まだやっていない）','Save as scheduled (not yet held)')}</button>`:''}
       ${base.status==='planned'&&!isNew?`<button class="btn block ghost" data-act="saveLesson" data-as="planned">${L('予定のまま保存する','Save, keep as scheduled')}</button><button class="btn block danger" data-act="cancelOpen" data-id="${l.id}">${L('キャンセルにする','Cancel lesson')}</button>`:''}
-      ${!isNew?`<button class="btn block ghost" data-act="delLesson" id="f-del" style="color:var(--due)">${L('このレッスンを消す','Delete this lesson')}</button>`:''}
+      ${!isNew&&base.status==='planned'?`<button class="btn block ghost" data-act="removeLesson" data-id="${l.id}">${L('予定を消す（自分の予定と重なった・次に繰り越す）','Remove (my schedule clash · carry over)')}</button>`:''}
+      ${!isNew?`<button class="btn block ghost" data-act="delLesson" id="f-del" style="color:var(--due)">${base.status==='planned'?L('間違えて入れた予定を消す（繰り越さない）','Delete a mistaken entry (no carry-over)'):L('このレッスンを消す','Delete this lesson')}</button>`:''}
     </div>
     <div class="foot"><button class="btn block" data-act="saveLesson" data-as="done">${base.status==='planned'||isNew?L('記録する（レッスンをした）','Log lesson (it happened)'):L('保存する','Save')}</button></div>`}`);
   if(!canc){refreshForm();fillPrefix()}
@@ -1225,20 +1226,23 @@ function applyCarry(c,rec){
 function skippable(date){return itemsOn(date,'all').filter(it=>it.kind==='event'||it.o.status==='planned')}
 function skipDayForm(date){
   const its=skippable(date);
-  F.skip={date,sel:new Set(its.map(it=>it.o.id))};
+  /* 大会・遠征などは「重なった理由」なので最初はチェックしない（練習・その他はチェック） */
+  const keepType=t=>!['practice','other'].includes(t);
+  const pre=its.filter(it=>it.kind==='lesson'||!keepType(it.o.type)).map(it=>it.o.id);
+  const conf0=its.find(it=>it.kind==='event'&&keepType(it.o.type));
+  F.skip={date,sel:new Set(pre),reason:'こちらの都合',conf:conf0?conf0.o.id:''};F.cxl={conf:F.skip.conf};
   const hasL=its.some(it=>it.kind==='lesson');
   openSheet(L(`${dl(date)} の予定をまとめて消す`,`Clear ${dl(date)}`),`
     <p class="hint" style="margin-top:0">${L('消さない予定はチェックを外してください。','Uncheck anything you want to keep.')}</p>
-    <div class="fld">${its.map(it=>{const o=it.o;const nm=it.kind==='lesson'?names(group(o)):o.title;return `<label class="todo" style="cursor:pointer"><input type="checkbox" class="sk-pick" data-id="${o.id}" checked><span class="tx"><b>${it.allDay?L('終日','All day'):o.time}</b> ${esc(nm)}${it.kind==='lesson'?` <span class="hint">${L('プライベート','private')}${o.pay.mode==='per'&&o.pay.paid?L('・前払い済み',' · prepaid'):''}</span>`:` <span class="pill evt" style="--c:${it.c}">${evtName(o.type)}</span>`}${o.seriesId?' <span class="hint">↻</span>':''}</span></label>`}).join('')}</div>
-    ${hasL?`<div class="fld"><span class="lb">${L('プライベートレッスンは','Private lessons')}</span><div class="radio">
-      <label><input type="radio" name="skmode" value="delete" checked> ${L('予定を消す（お休み・スキップ）','Delete (day off / skip)')}<small>${L('前払い済みのレッスンだけは、代金がなくならないように「振替待ち」として残します','Prepaid lessons are kept as pending make-ups so the payment isn’t lost')}</small></label>
-      <label><input type="radio" name="skmode" value="carry"> ${L('キャンセルにして、次の予定に繰り越す','Cancel and carry over to the next lesson')}<small>${L('いつものキャンセルと同じです（予定の内容と前払い分を次の予定へ）','Same as a normal cancellation (plan and prepayment move to the next lesson)')}</small></label></div></div>`:''}
+    <div class="fld">${its.map(it=>{const o=it.o;const nm=it.kind==='lesson'?names(group(o)):o.title;return `<label class="todo" style="cursor:pointer"><input type="checkbox" class="sk-pick" data-id="${o.id}" ${F.skip.sel.has(o.id)?'checked':''}><span class="tx"><b>${it.allDay?L('終日','All day'):o.time}</b> ${esc(nm)}${it.kind==='lesson'?` <span class="hint">${L('プライベート','private')}${o.pay.mode==='per'&&o.pay.paid?L('・前払い済み',' · prepaid'):''}</span>`:` <span class="pill evt" style="--c:${it.c}">${evtName(o.type)}</span>`}${o.seriesId?' <span class="hint">↻</span>':''}</span></label>`}).join('')}</div>
+    ${hasL?`<div class="fld"><span class="lb">${L('理由','Reason')}</span><div class="chips">${['こちらの都合','体調不良','その他'].map(r=>`<button class="chip" data-act="skReason" data-v="${r}" aria-pressed="${r===F.skip.reason}">${tReason(r)}</button>`).join('')}</div>
+      <div id="sk-conf" style="margin-top:8px">${conflictChips(date,F.skip.conf)}</div>
+      <p class="hint" style="margin:8px 0 0">${L('プライベートレッスンは「予定変更」として残し、やる予定だった内容と代金を次の予定に繰り越します（次の予定がなければ「振替待ち」）。','Private lessons are kept as “rescheduled”; the plan and payment carry over to the next lesson (or wait as a pending make-up).')}</p></div>`:''}
     <p class="hint">${L('繰り返しの予定（↻）は、この日の分だけ消えます。ほかの日はそのままです。','For repeating items (↻), only this day is removed.')}</p>
-    <div class="foot"><button class="btn block danger" data-act="skipSave" id="sk-btn" style="background:var(--due);color:var(--card)">${L(`${its.length}件を消す`,`Clear ${its.length}`)}</button></div>`);
+    <div class="foot"><button class="btn block danger" data-act="skipSave" id="sk-btn" style="background:var(--due);color:var(--card)">${L(`${F.skip.sel.size}件を消す`,`Clear ${F.skip.sel.size}`)}</button></div>`);
 }
 function skipSave(){
   const {date,sel}=F.skip;
-  const mode=document.querySelector('input[name="skmode"]:checked')?.value||'delete';
   const its=skippable(date).filter(it=>sel.has(it.o.id));
   if(!its.length){toast(L('消す予定を選んでください','Pick something to clear'));return}
   let del=0,kept=0,carried=0;
@@ -1246,32 +1250,43 @@ function skipSave(){
   S.events=S.events.filter(e=>!evIds.includes(e.id));del+=evIds.length;
   const ls=its.filter(it=>it.kind==='lesson').flatMap(it=>group(it.o)).filter(l=>l.status==='planned');
   const ids=ls.map(l=>l.id), remove=[];
+  const reason=F.skip.reason, conflict=reason==='こちらの都合'?confOf(F.cxl.conf):null;
   ls.forEach(c=>{
-    const prepaid=c.pay.mode==='per'&&c.pay.paid;
-    if(mode==='carry'){
-      c.status='cancelled';c.cancel={reason:'こちらの都合',on:today(),carry:'none'};
-      const t=nextPlanned(c,ids);if(t){moveTo(c,t);carried++}else{c.cancel.carry='pending';kept++}
-    }else if(prepaid){c.status='cancelled';c.cancel={reason:'こちらの都合',on:today(),carry:'pending'};kept++}
-    else remove.push(c.id);
+    c.status='cancelled';c.cancel={reason,by:reason==='こちらの都合'?'coach':'student',conflict,on:today(),carry:'none'};
+    const t=nextPlanned(c,ids);if(t){moveTo(c,t);carried++}else{c.cancel.carry='pending';kept++}
   });
   S.lessons.forEach(l=>{if(l.cancel?.to&&remove.includes(l.cancel.to)){l.cancel.carry='pending';delete l.cancel.to}});
   S.lessons=S.lessons.filter(l=>!remove.includes(l.id));
   del+=dedupe(ls.filter(l=>remove.includes(l.id))).length;
-  const sub=[del?L(`${del}件を消しました`,`${del} removed`):'',carried?L(`${carried}件を次の予定に繰り越しました`,`${carried} carried over`):'',kept?L(`${kept}件は振替待ちに残しました`,`${kept} kept as pending make-ups`):''].filter(Boolean).join(L('・',' · '));
+  carried=dedupe(ls.filter(l=>l.cancel.carry==='moved')).length;kept=dedupe(ls.filter(l=>l.cancel.carry==='pending')).length;
+  const sub=[del?L(`柔道の予定 ${del}件を消しました`,`${del} event(s) removed`):'',carried?L(`${carried}件を次の予定に繰り越しました`,`${carried} carried over`):'',kept?L(`${kept}件は振替待ちに残しました`,`${kept} kept as pending make-ups`):''].filter(Boolean).join(L('・',' · '));
   run(()=>{save();closeSheet();render()},L(`${dl(date)} の予定を片づけました`,`${dl(date)} cleared`),sub);
 }
 
+/* キャンセルの種類：生徒側のキャンセル／自分の予定と重なった（予定変更）。重なった予定（大会・遠征など）も残す */
+const isCoachSide=c=>!!c&&(c.by==='coach'||c.reason==='こちらの都合');
+const cxWord=l=>isCoachSide(l.cancel)?L('予定変更','Rescheduled'):L('キャンセル','Cancelled');
+function cxWhy(l){const c=l.cancel||{};
+  if(isCoachSide(c))return c.conflict?L(`${evtName(c.conflict.type)}「${c.conflict.title}」と重なった`,`Clashed with ${c.conflict.title} (${evtName(c.conflict.type)})`):L('自分の予定と重なった','Clashed with my schedule');
+  return L(`${tReason(c.reason||'')}でキャンセル`,`Cancelled: ${tReason(c.reason||'')}`)}
+function conflictsOn(date,ex=[]){return S.events.filter(e=>(e.date===date||(e.allDay&&e.edate&&e.date<=date&&date<=e.edate))&&!ex.includes(e.id))}
+function conflictChips(date,cur,ex=[]){const evs=conflictsOn(date,ex);if(!evs.length)return `<div class="hint">${L('この日に入っている柔道の予定はありません。','No judo events on this day.')}</div>`;
+  return `<div class="hint" style="margin-bottom:4px">${L('どの予定と重なりましたか','Which event?')}</div><div class="chips">${evs.map(e=>`<button class="chip typechip" style="--c:${evtColor(e.type)}" data-act="cxConf" data-id="${e.id}" aria-pressed="${cur===e.id}">${esc(e.title)}</button>`).join('')}<button class="chip" data-act="cxConf" data-id="" aria-pressed="${!cur}">${L('ほかの用事','Something else')}</button></div>`}
+const confOf=id=>{const e=S.events.find(x=>x.id===id);return e?{id:e.id,title:e.title,type:e.type}:null};
+
 /* キャンセル */
-function cancelForm(id){
+function cancelForm(id,coach){
   const l=byId(id), grp=group(l);
   const nxt=nextPlanned(l);
-  F.cxl={id,reason:REASONS[0]};
-  openSheet(L('キャンセルにする','Cancel lesson'),`
+  const ev0=conflictsOn(l.date)[0];
+  F.cxl={id,reason:coach?'こちらの都合':REASONS[0],conf:coach&&ev0?ev0.id:''};
+  openSheet(coach?L('予定を消す（次に繰り越す）','Remove lesson (carry over)'):L('キャンセルにする','Cancel lesson'),`
     <div class="prev"><b>${dl(l.date)} ${l.time}–</b>${esc(names(grp))}${l.plan?`<br>${L('予定','Plan')}: ${esc(l.plan)}`:''}</div>
     ${grp.length>1?`<div class="fld"><span class="lb">${L('誰が休みますか','Who is out?')}</span><div class="radio">
       <label><input type="radio" name="who" value="all" checked> ${L('2人とも（このレッスンをなくす）','Both (no lesson)')}</label>
       ${grp.map(x=>`<label><input type="radio" name="who" value="${x.sid}"> ${L(`${esc(stu(x.sid).name)} だけ`,`Only ${esc(stu(x.sid).name)}`)}<small>${L('もう1人はマンツーマンとして続けます','The other student continues as a private lesson')}</small></label>`).join('')}</div></div>`:''}
-    <div class="fld"><span class="lb">${L('理由','Reason')}</span><div class="chips">${REASONS.map(r=>`<button class="chip" data-act="cxReason" data-v="${r}" aria-pressed="${r===REASONS[0]}">${tReason(r)}</button>`).join('')}</div></div>
+    <div class="fld"><span class="lb">${L('理由','Reason')}</span><div class="chips">${REASONS.map(r=>`<button class="chip" data-act="cxReason" data-v="${r}" aria-pressed="${r===F.cxl.reason}">${tReason(r)}</button>`).join('')}</div>
+      <div id="cx-conf" style="margin-top:8px" ${F.cxl.reason==='こちらの都合'?'':'hidden'}>${conflictChips(l.date,F.cxl.conf)}</div></div>
     <div class="fld"><span class="lb">${L('繰り越し','Carry over')}</span><div class="radio">
       ${nxt?`<label><input type="radio" name="carry" value="next" checked> ${L(`次の予定（${dl(nxt.date)}）に繰り越す`,`Carry over to the next lesson (${dl(nxt.date)})`)}<small>${L('やる予定だった内容と、前払い分を次の予定に引き継ぎます','Moves the plan and any prepayment to the next lesson')}</small></label>`:''}
       <label><input type="radio" name="carry" value="new" ${nxt?'':'checked'}> ${L('振替の日にちを決める','Pick a make-up date')}<small>${L('新しく予定を入れて、内容と支払いを引き継ぎます','Schedules a new lesson with the plan and payment carried over')}</small></label>
@@ -1281,7 +1296,7 @@ function cancelForm(id){
       <div id="cx-feebox" hidden class="paybox"><label class="check"><input type="checkbox" id="cx-fee"> ${L('キャンセル料をいただく','Charge a cancellation fee')}</label><div class="two"><div class="fld" style="margin:0"><label for="cx-amt">${L('金額（$）','Amount ($)')}</label><input type="number" id="cx-amt" inputmode="decimal" value="${l.pay.mode==='per'?l.pay.amount:priceFor(l.sid,l.dur,grp.length)}"></div></div></div>
     </div></div>
     <p class="hint">${L('回数券はキャンセルでは減りません。','Cancelling never uses a lesson from the pack.')}</p>
-    <button class="btn block danger" data-act="cancelSave" style="background:var(--due);color:var(--card)">${L('キャンセルにする','Cancel lesson')}</button>`);
+    <button class="btn block danger" data-act="cancelSave" style="background:var(--due);color:var(--card)">${coach?L('予定を消して繰り越す','Remove and carry over'):L('キャンセルにする','Cancel lesson')}</button>`);
 }
 function nextPlanned(l,ex=[]){return sortL(S.lessons.filter(x=>x.sid===l.sid&&x.status==='planned'&&x.id!==l.id&&!ex.includes(x.id)&&(x.date+x.time)>(l.date+l.time)))[0]}
 function moveTo(c,t){
@@ -1301,7 +1316,7 @@ function cancelSave(){
   let msg='';
   const ng=opt==='new'&&targets.length>1?uid():null;
   targets.forEach(c=>{
-    c.status='cancelled';c.cancel={reason:F.cxl.reason,on:today(),carry:'none'};
+    c.status='cancelled';c.cancel={reason:F.cxl.reason,by:F.cxl.reason==='こちらの都合'?'coach':'student',conflict:F.cxl.reason==='こちらの都合'?confOf(F.cxl.conf):null,on:today(),carry:'none'};
     if(opt==='next'){const t=nextPlanned(c,ids);if(t){moveTo(c,t);msg=L(`次の予定 ${md(t.date)} に繰り越しました`,`Carried over to ${dl(t.date)}`)}else{c.cancel.carry='pending';msg=L('振替待ちにしました','Marked as pending make-up')}}
     else if(opt==='new'){const d=g('cx-date').value||addDays(c.date,7);const t={id:uid(),sid:c.sid,gid:ng,date:d,time:readT('cx-t'),place:c.place||'',seriesId:null,dur:c.dur,status:'planned',waza:[],content:'',next:'',plan:'',pay:defaultPay(c.sid,targets.length,c.dur),cancel:null,from:null};S.lessons.push(t);moveTo(c,t);msg=L(`振替を ${dl(d)} に入れました`,`Make-up scheduled: ${dl(d)}`)}
     else if(opt==='later'){c.cancel.carry='pending';msg=L('ホームの「振替待ち」に残しました','Listed on Home under make-ups to schedule')}
@@ -1311,7 +1326,7 @@ function cancelSave(){
     }
   });
   if(who!=='all'){const rest=grp.filter(x=>x.sid!==who);if(rest.length===1){rest[0].gid=null;if(rest[0].pay.mode==='per'&&!rest[0].pay.paid)rest[0].pay.amount=priceFor(rest[0].sid,rest[0].dur,1)}targets.forEach(x=>x.gid=null)}
-  run(()=>{save();closeSheet();render()},L('キャンセルにしました','Lesson cancelled'),msg);
+  run(()=>{save();closeSheet();render()},F.cxl.reason==='こちらの都合'?L('予定変更にしました','Marked as rescheduled'):L('キャンセルにしました','Lesson cancelled'),msg);
 }
 
 function stuForm(s){
@@ -1549,7 +1564,11 @@ document.addEventListener('click',e=>{
       if(!F.confirmDel){F.confirmDel=true;b.textContent=L('もう一度押すと消えます','Tap again to delete');return}
       doDel('one');break}
     case 'cancelOpen':cancelForm(id);break;
-    case 'cxReason':F.cxl.reason=v;b.parentElement.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));break;
+    case 'cxReason':F.cxl.reason=v;b.parentElement.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));
+      if(g('cx-conf')){g('cx-conf').hidden=v!=='こちらの都合';if(v==='こちらの都合'&&F.cxl.conf===''){const l=byId(F.cxl.id);const e=conflictsOn(l.date)[0];if(e){F.cxl.conf=e.id;g('cx-conf').innerHTML=conflictChips(l.date,e.id)}}}break;
+    case 'cxConf':F.cxl.conf=id;b.parentElement.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));break;
+    case 'skReason':F.skip.reason=v;b.parentElement.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));g('sk-conf').hidden=v!=='こちらの都合';break;
+    case 'removeLesson':closeSheet();cancelForm(id,true);break;
     case 'cancelSave':cancelSave();break;
     case 'uncancel':{const l=byId(id);
       if(l.cancel?.carry==='moved'){const t=byId(l.cancel.to);if(t&&t.from===l.id){if(t.pay.mode==='per'&&t.pay.paid&&l.pay.mode!=='per'){l.pay={...t.pay};t.pay=defaultPay(t.sid,1,t.dur)}t.from=null}}
