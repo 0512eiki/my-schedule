@@ -314,7 +314,7 @@ const evtColor=t=>`var(${evtInfo(t)[3]})`;
 
 /* ---------- データ ---------- */
 const COLORS=['#34449a','#b5542b','#1d845a','#7a4bb0','#0f7f8c','#a3367a','#5f6b1e'];
-const METHODS=['現金','Zelle','Venmo','その他'];
+const METHODS=['現金'];   // 本人の方針：代金は現金だけ（選ぶ欄は出さない）
 const REASONS=['生徒の都合','体調不良','こちらの都合','天候','その他'];
 const WAZA={'立ち技':['大外刈','大内刈','小内刈','内股','払腰','背負投','体落','袖釣込腰','小外刈','出足払','巴投'],'寝技':['袈裟固','横四方固','上四方固','縦四方固','腕挫十字固','送襟絞','寝技の返し'],'その他':['受身','打ち込み','乱取り','組み手','体力づくり','試合の作戦']};
 
@@ -531,8 +531,8 @@ function projection(month){
 /* お金の流れ：受け取った日で数える */
 function income(){
   const rows=[];
-  S.lessons.forEach(l=>{if(l.pay.mode==='per'&&l.pay.paid)rows.push({date:l.pay.paidOn||l.date,sid:l.sid,kind:l.status==='cancelled'?L('キャンセル料','Cancellation fee'):l.gid?L('ペアレッスン','Pair lesson'):L('レッスン','Lesson'),lessonDate:l.date,amount:+l.pay.amount,method:l.pay.method})});
-  S.packages.forEach(p=>{if(p.paid)rows.push({date:p.paidOn||p.date,sid:p.sid,kind:L(`回数券 ${p.count}回`,`${p.count}-lesson pack`),lessonDate:'',amount:+p.price,method:p.method})});
+  S.lessons.forEach(l=>{if(l.pay.mode==='per'&&l.pay.paid&&!l.pay.prior)rows.push({date:l.pay.paidOn||l.date,sid:l.sid,kind:l.status==='cancelled'?L('キャンセル料','Cancellation fee'):l.gid?L('ペアレッスン','Pair lesson'):L('レッスン','Lesson'),lessonDate:l.date,amount:+l.pay.amount,method:l.pay.method})});
+  S.packages.forEach(p=>{if(p.paid&&!p.prior)rows.push({date:p.paidOn||p.date,sid:p.sid,kind:L(`回数券 ${p.count}回`,`${p.count}-lesson pack`),lessonDate:'',amount:+p.price,method:p.method})});
   return rows.sort((a,b)=>a.date.localeCompare(b.date));
 }
 
@@ -585,7 +585,7 @@ function payPill(l){
   }
   if(l.status==='planned')return `<span class="pill plan">${l.pay.mode==='ticket'?L('予定・回数券','Scheduled · pack'):l.pay.mode==='per'&&l.pay.paid?L(`予定・前払い済み ${money(l.pay.amount)}`,`Scheduled · prepaid ${money(l.pay.amount)}`):`${L('予定','Scheduled')} ${money(l.pay.amount)}`}</span>`;
   if(l.pay.mode==='ticket'){const p=S.packages.find(x=>x.id===l.pay.pid);return `<span class="pill ticket">${L('回数券','Pack')} ${ticketNo(l)}/${p?p.count:'?'}</span>`}
-  if(l.pay.mode==='per')return l.pay.paid?`<span class="pill paid">${L('支払い済み','Paid')}</span>`:`<span class="pill due">${L('未払い','Unpaid')} ${money(l.pay.amount)}</span>`;
+  if(l.pay.mode==='per')return l.pay.paid?`<span class="pill paid">${l.pay.prior?L('支払い済み（以前）','Paid (before)'):L('支払い済み','Paid')}</span>`:`<span class="pill due">${L('未払い','Unpaid')} ${money(l.pay.amount)}</span>`;
   return '';
 }
 function lessonRow(l,showDate=true,onlySid=null){
@@ -861,7 +861,7 @@ function moneyView(){
   </section>
   <div class="grid2">
     <section class="card"><h2>${L('生徒ごと','By student')}</h2>${Object.keys(by).length?`<table><tr><th>${L('生徒','Student')}</th><th class="r">${L('金額','Amount')}</th></tr>${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([sid,v])=>`<tr><td>${esc(stu(sid).name)}</td><td class="r">${money(v)}</td></tr>`).join('')}</table>`:`<div class="empty">${L('この月の受け取りはありません。','Nothing received this month.')}</div>`}
-      <h2 style="margin-top:16px">${L('受け取り方法','Payment method')}</h2><div class="chips">${Object.entries(meth).map(([k,v])=>`<span class="tag">${esc(k)} <span class="num">${money(v)}</span></span>`).join('')||'<span class="empty">—</span>'}</div></section>
+      ${Object.keys(meth).length>1?`<h2 style="margin-top:16px">${L('受け取り方法','Payment method')}</h2><div class="chips">${Object.entries(meth).map(([k,v])=>`<span class="tag">${esc(k)} <span class="num">${money(v)}</span></span>`).join('')}</div>`:''}</section>
     <section class="card"><h2>${L('明細','Details')} <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm ghost" data-act="csv" data-v="month">${L('この月のCSV','CSV: this month')}</button><button class="btn sm ghost" data-act="csv" data-v="year">${L(`${y}年のCSV`,`CSV: ${y}`)}</button></span></h2>
       <div class="tablewrap"><table><tr><th>${L('受取日','Date')}</th><th>${L('生徒','Student')}</th><th>${L('内容','Item')}</th><th class="r">${L('金額','Amount')}</th></tr>${mr.map(r=>`<tr><td class="num">${md(r.date)}</td><td>${esc(stu(r.sid).name)}</td><td>${esc(r.kind)}${r.lessonDate&&r.lessonDate!==r.date?`<span class="hint">（${L(`${md(r.lessonDate)}分`,`for ${md(r.lessonDate)}`)}）</span>`:''}</td><td class="r">${money(r.amount)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">—</td></tr>'}</table></div>
       <p class="hint">${L('確定申告（Schedule C）用に、1年分をCSVで書き出せます。','Export a full year as CSV for your tax return (Schedule C).')}</p></section>
@@ -876,12 +876,17 @@ function openSheet(title,body){
 }
 function closeSheet(){g('layer').innerHTML='';document.body.style.overflow=''}
 function g(id){return document.getElementById(id)}
-const methodChips=(act,cur,sid)=>`<div class="chips">${METHODS.map(m=>`<button class="chip" data-act="${act}" ${sid?`data-sid="${sid}"`:''} data-v="${m}" aria-pressed="${cur===m}">${tMethod(m)}</button>`).join('')}</div>`;
+const priorLabel=()=>L('このアプリを使う前に受け取った分（売上の集計に入れない）','Received before I started using this app (don’t count in income)');
+function recvDateHtml(P,val,lessonDate){
+  return `<div class="fld"><label for="${P}-pdate">${L('受け取った日','Date received')}</label><div class="drow"><input type="date" id="${P}-pdate" value="${val||today()}">${lessonDate&&lessonDate!==today()?`<button class="chip" data-act="pdateLesson" data-p="${P}" data-v="${lessonDate}">${L('レッスンの日','Lesson day')}</button>`:''}</div>
+    <div class="hint">${L('受け取った日の月の売上に入ります。','Counted in income for the month you received it.')}</div></div>`;
+}
+const methodChips=(act,cur,sid)=>METHODS.length<2?'':`<div class="chips">${METHODS.map(m=>`<button class="chip" data-act="${act}" ${sid?`data-sid="${sid}"`:''} data-v="${m}" aria-pressed="${cur===m}">${tMethod(m)}</button>`).join('')}</div>`;
 
 function defaultPay(sid,n,dur){const a=activePkg(sid);return a.length&&n<2?{mode:'ticket',pid:a[0].id}:{mode:'per',amount:priceFor(sid,dur,n),paid:false}}
 function payState(p,sid,n,dur){
   if(!p)p=defaultPay(sid,n,dur);
-  return {mode:p.mode==='ticket'?'ticket':p.paid?'paid':'due',method:p.method||'現金',pid:p.pid||'',amount:p.amount??priceFor(sid,dur,n),paidOn:p.paidOn||''};
+  return {mode:p.mode==='ticket'?'ticket':p.paid?'paid':'due',method:p.method||'現金',pid:p.pid||'',amount:p.amount??priceFor(sid,dur,n),paidOn:p.paidOn||'',prior:!!p.prior};
 }
 
 /* レッスンの記録・予定（マンツーマン／ペア） */
@@ -952,7 +957,7 @@ function renderPay(){
       ${P.mode==='ticket'?(pk.length?`<div class="chips">${pk.map(p=>`<button class="chip" data-act="fPkg" data-sid="${sid}" data-id="${p.id}" aria-pressed="${p.id===P.pid}">${L(`${p.count}回券（${md(p.date)}）残り${left(p)}回`,`${p.count}-pack (${md(p.date)}) · ${left(p)} left`)}</button>`).join('')}</div><div class="hint">${L('レッスンをした日に1回分減ります。予定やキャンセルでは減りません。','One is used on the day the lesson happens. Scheduling or cancelling doesn’t use one.')}</div>`
         :`<div class="hint">${L('使える回数券がありません。生徒の画面の「＋ 回数券を追加」から登録できます。','No pack available. Add one from the student page (“＋ Add pack”).')}</div>`)
       :`<div class="two"><div class="fld" style="margin:0"><label for="f-amt-${sid}">${L('金額（$）','Amount ($)')}</label><input type="number" class="f-amount" id="f-amt-${sid}" data-sid="${sid}" inputmode="decimal" min="0" value="${esc(P.amount)}"></div></div>
-        ${P.mode==='paid'?methodChips('fMethod',P.method,sid):`<div class="hint">${L('ホームの「まだいただいていない代金」に出ます（予定のうちは出ません）。','Shows under “Payments due” on Home (not while still scheduled).')}</div>`}`}</div>`}).join('');
+        ${P.mode==='paid'?methodChips('fMethod',P.method,sid)+`<div class="fld" style="margin:0"><label for="f-pd-${sid}">${L('受け取った日','Date received')}</label><input type="date" class="f-pdate" id="f-pd-${sid}" data-sid="${sid}" value="${P.paidOn||today()}"></div><label class="check"><input type="checkbox" class="f-prior" data-sid="${sid}" ${P.prior?'checked':''}> ${priorLabel()}</label>`:`<div class="hint">${L('ホームの「まだいただいていない代金」に出ます（予定のうちは出ません）。','Shows under “Payments due” on Home (not while still scheduled).')}</div>`}`}</div>`}).join('');
 }
 /* 記録の画面で生徒（ペア）を選び直す */
 /* ペアのときは「やったこと」に生徒の名前を1行ずつ入れておく（例：De: ／ Liz: ） */
@@ -1006,7 +1011,7 @@ function saveLesson(as,scope){
   F.sids.forEach(sid=>{
     const id=F.ids[sid]||uid(), old=byId(id);
     const P=F.pay[sid];
-    const pay=P.mode==='ticket'?{mode:'ticket',pid:P.pid}:{mode:'per',amount:+P.amount||0,paid:P.mode==='paid',method:P.mode==='paid'?P.method:'',paidOn:P.mode==='paid'?(P.paidOn||today()):''};
+    const pay=P.mode==='ticket'?{mode:'ticket',pid:P.pid}:{mode:'per',amount:+P.amount||0,paid:P.mode==='paid',method:P.mode==='paid'?P.method:'',paidOn:P.mode==='paid'?(P.paidOn||today()):'',prior:P.mode==='paid'&&!!P.prior};
     const rec={...(old||{}),id,sid,...shared,pay,cancel:null,from:old?.from||null};
     const c=F.carry[sid]?byId(F.carry[sid]):null;
     if(c)applyCarry(c,rec);
@@ -1289,7 +1294,7 @@ function settingsForm(){
 }
 function pkgForm(sid){
   const s=stu(sid);
-  F.method='Zelle';
+  F.method='現金';
   const per=priceFor(sid,s.dur,1);
   openSheet(L('回数券を追加','Add lesson pack'),`
     <div class="prev"><b>${esc(s.name)}</b>${L('先にいただいた回数分を登録します。レッスンをした日に残りが1回減ります（キャンセルでは減りません）。','Record lessons paid in advance. One is used each time a lesson happens (not when cancelled).')}</div>
@@ -1299,7 +1304,7 @@ function pkgForm(sid){
     <div class="fld"><label for="k-date">${L('購入日','Purchase date')}</label><input type="date" id="k-date" value="${today()}"></div></div>
     <div class="hint" style="margin:-6px 0 12px">${L(`1回 ${s.dur}分 ${money(per)} × 回数で計算しています。割引するときは合計金額を直してください。`,`Calculated as ${money(per)} per ${s.dur}-min lesson × count. Edit the total to give a discount.`)}</div>
     <div class="fld"><label class="check"><input type="checkbox" id="k-paid" checked> ${L('代金は受け取り済み','Payment received')}</label></div>
-    <div class="fld" id="k-mbox"><span class="lb">${L('受け取り方法','Payment method')}</span>${methodChips('fMethodK',F.method)}</div>
+    <div id="k-mbox">${methodChips('fMethodK',F.method)}<label class="check" style="margin-bottom:14px"><input type="checkbox" id="k-prior"> ${priorLabel()}</label></div>
     <button class="btn block" data-act="savePkg" data-sid="${sid}">${L('追加する','Add')}</button>`);
 }
 function receiveForm(kind,id){
@@ -1311,7 +1316,9 @@ function receiveForm(kind,id){
   openSheet(L('代金を受け取る','Record payment'),`
     <div class="prev"><b>${esc(s.name)}</b>${kind==='stu'?items.map(l=>`${dl(l.date)} ${l.status==='cancelled'?L('キャンセル料 ','cancel fee '):l.gid?L('ペア ','pair '):''}${money(l.pay.amount)}`).join('<br>'):L('回数券','Lesson pack')}</div>
     ${kind==='stu'&&items.length>1?`<div class="fld"><span class="lb">${L('どの回の分ですか','Which lessons?')}</span><div class="chips">${items.map(l=>`<button class="chip" data-act="recvPick" data-id="${l.id}" aria-pressed="true">${md(l.date)}</button>`).join('')}</div></div>`:''}
-    <div class="fld"><span class="lb">${L('受け取り方法','Payment method')}</span>${methodChips('fMethodK',F.method)}</div>
+    ${methodChips('fMethodK',F.method)}
+    ${recvDateHtml('r','',kind==='stu'&&items.length?items[items.length-1].date:'')}
+    <label class="check" style="margin-bottom:14px"><input type="checkbox" id="r-prior"> ${priorLabel()}</label>
     <button class="btn block paid" data-act="saveRecv" id="r-btn">${recvLabel(total)}</button>`);
 }
 const recvLabel=t=>L(`${money(t)} を受け取りました`,`Received ${money(t)}`);
@@ -1450,19 +1457,20 @@ document.addEventListener('click',e=>{
     case 'savePkg':{
       const paid=g('k-paid').checked;
       const p={id:uid(),sid,count:+g('k-count').value||10,price:+g('k-price').value||0,date:g('k-date').value||today(),paid,method:paid?F.method:''};
-      if(paid)p.paidOn=p.date;
+      if(paid){p.paidOn=p.date;if(g('k-prior').checked)p.prior=true}
       S.packages.push(p);
       S.lessons.forEach(l=>{if(l.sid===p.sid&&l.status==='planned'&&!l.gid&&!(l.pay.mode==='per'&&l.pay.paid)&&l.pay.mode!=='ticket')l.pay={mode:'ticket',pid:p.id}});
-      run(()=>{save();closeSheet();render()},L(`${p.count}回券を追加しました`,`Added a ${p.count}-lesson pack`),paid?`${money(p.price)} (${tMethod(p.method)})`:L('未払いとしてホームに出ます','Shows on Home as payment due'));break}
+      run(()=>{save();closeSheet();render()},L(`${p.count}回券を追加しました`,`Added a ${p.count}-lesson pack`),paid?(p.prior?L('以前に受け取った分（売上には入れません）','Received before (not counted in income)'):`${money(p.price)}`):L('未払いとしてホームに出ます','Shows on Home as payment due'));break}
     case 'receive':receiveForm('stu',sid);break;
     case 'receivePkg':receiveForm('pkg',id);break;
     case 'recvPick':{const on=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',on);F.recv.ids=on?[...F.recv.ids,id]:F.recv.ids.filter(x=>x!==id);
       g('r-btn').textContent=recvLabel(F.recv.ids.reduce((s,i)=>s+ +byId(i).pay.amount,0));break}
     case 'saveRecv':{
-      const r=F.recv,t=today();let sum=0;
-      if(r.kind==='stu'){if(!r.ids.length){toast(L('受け取った回を選んでください','Pick the lessons paid for'));return}r.ids.forEach(i=>{const l=byId(i);Object.assign(l.pay,{paid:true,method:F.method,paidOn:t});sum+= +l.pay.amount})}
-      else{const p=S.packages.find(x=>x.id===r.id);Object.assign(p,{paid:true,method:F.method,paidOn:t});sum=p.price}
-      run(()=>{save();closeSheet();render()},recvLabel(sum),L(`${tMethod(F.method)}・ありがとうございました`,`${tMethod(F.method)} · thank you`));break}
+      const r=F.recv,t=g('r-pdate').value||today(),prior=g('r-prior').checked;let sum=0;
+      if(r.kind==='stu'){if(!r.ids.length){toast(L('受け取った回を選んでください','Pick the lessons paid for'));return}r.ids.forEach(i=>{const l=byId(i);Object.assign(l.pay,{paid:true,method:F.method,paidOn:t,prior});sum+= +l.pay.amount})}
+      else{const p=S.packages.find(x=>x.id===r.id);Object.assign(p,{paid:true,method:F.method,paidOn:t,prior});sum=p.price}
+      run(()=>{save();closeSheet();render()},recvLabel(sum),prior?L('以前に受け取った分として記録しました（売上には入れません）','Recorded as received before (not counted in income)'):t!==today()?L(`${md(t)} に受け取った分として、${+t.slice(5,7)}月の売上に入れました`,`Counted in ${ymTitle(+t.slice(0,4),+t.slice(5,7))} income`):L('ありがとうございました','Thank you'));break}
+    case 'pdateLesson':g(b.dataset.p+'-pdate').value=v;break;
     case 'fStu':{
       const on=!F.sids.includes(id);
       if(on&&F.sids.length>=2){toast(L('ペアは2人までです','A pair is two students'),L('先にどちらかを外してください','Deselect one first'));return}
@@ -1503,6 +1511,8 @@ document.addEventListener('click',e=>{
 document.addEventListener('focusin',e=>{const t=e.target;if(t.id==='f-content'&&F.sids?.length>1&&onlyPrefix(t.value)&&t.value){const p=t.value.indexOf('\n');setTimeout(()=>t.setSelectionRange(p<0?t.value.length:p,p<0?t.value.length:p),0)}});
 document.addEventListener('input',e=>{
   if(e.target.classList.contains('f-amount'))F.pay[e.target.dataset.sid].amount=e.target.value;
+  if(e.target.classList.contains('f-pdate'))F.pay[e.target.dataset.sid].paidOn=e.target.value;
+  if(e.target.classList.contains('f-prior'))F.pay[e.target.dataset.sid].prior=e.target.checked;
 });
 document.addEventListener('change',e=>{
   const id=e.target.id;
