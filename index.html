@@ -1274,7 +1274,8 @@ function applyCarry(c,rec){
 }
 
 /* ---------- 案内から自動で入れる（Claude が読み取る・Edge Function my-schedule-ai） ---------- */
-const safeName=n=>n.replace(/[^\w.\-ぁ-んァ-ヶ一-龥ー]+/g,'_').slice(-80)||'file';
+/* 保存場所のファイル名は英数字だけ（日本語の名前は受け付けられないため）。画面には元の名前を出す */
+const safeName=n=>{const ext=(n.match(/\.[A-Za-z0-9]{1,5}$/)||[''])[0].toLowerCase();const base=n.slice(0,n.length-ext.length).normalize('NFKD').replace(/[^A-Za-z0-9._-]+/g,'_').replace(/_+/g,'_').replace(/^[_.]+|_+$/g,'').slice(-60);return (base||'file')+ext};
 async function shrinkImage(file){
   if(!/^image\/(jpeg|png|webp|heic|heif)/.test(file.type)&&!/\.(heic|heif)$/i.test(file.name))return file;
   try{const bmp=await createImageBitmap(file);const k=Math.min(1,2000/Math.max(bmp.width,bmp.height));
@@ -1319,7 +1320,7 @@ async function importRun(){
   try{
     btn.textContent=L('アップロード中…','Uploading…');
     const metas=[];for(const f of F.imp.files)metas.push(await uploadDoc(f));
-    if(text)metas.push(await uploadDoc(new File([text],L('貼り付けた文章.txt','pasted-text.txt'),{type:'text/plain'})));
+    if(text){try{const m=await uploadDoc(new File([text],'pasted-text.txt',{type:'text/plain'}));m.name=L('貼り付けた文章.txt','pasted-text.txt');metas.push(m)}catch(e){console.warn('text copy not saved',e)}}
     btn.textContent=L('AIが読み取り中…','AI is reading…');
     const {data,error}=await sb.functions.invoke('my-schedule-ai',{body:{paths:metas.filter(m=>m.mime!=='text/plain').map(m=>m.path),text,url:scomp?'':url,lang:LANGV,today:today()}});
     if(error){let code='';try{code=(await error.context.json()).error}catch(e){}throw new Error(aiErr(code))}
