@@ -1296,7 +1296,8 @@ function dropFiles(evs){
 function importForm(){
   F.imp={files:[]};
   openSheet(L('案内から自動で入れる','Fill in from a document'),`
-    <p class="hint" style="margin-top:0">${L('大会のPDF・チラシのスクショ・Webページやメールの文章を入れると、AIが大会名・日付・場所などを読み取って予定を作ります。まとめも一緒に保存されます。','Add a PDF, a flyer screenshot, or text from a web page or email. AI reads the name, dates and venue, and saves a summary with the event.')}</p>
+    <p class="hint" style="margin-top:0">${L('大会のページのURL・PDF・チラシのスクショ・メールの文章を入れると、AIが大会名・日付・場所などを読み取って予定を作ります。まとめも一緒に保存されます。','Add an event page URL, a PDF, a flyer screenshot, or text from an email. AI reads the name, dates and venue, and saves a summary with the event.')}</p>
+    <div class="fld"><label for="im-url">${L('大会のページのURL','Event page URL')}</label><input id="im-url" type="url" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="https://..."></div>
     <label class="drop" for="im-files">${L('PDF・画像を選ぶ（6つまで）','Choose PDFs or images (up to 6)')}<input type="file" id="im-files" accept="application/pdf,image/*" multiple></label>
     <div id="im-list" class="chips" style="margin:8px 0 14px"></div>
     <div class="fld"><label for="im-text">${L('または、文章を貼り付け','Or paste text')}</label><textarea id="im-text" maxlength="100000" style="min-height:120px" placeholder="${L('Webページやメールの内容をそのまま貼り付けてください','Paste the web page or email as is')}"></textarea></div>
@@ -1304,37 +1305,39 @@ function importForm(){
 }
 function renderImpList(){g('im-list').innerHTML=F.imp.files.map((f,i)=>`<span class="tag">${esc(f.name)} <button class="del" data-act="impDel" data-v="${i}" aria-label="${L('外す','Remove')}">✕</button></span>`).join('')}
 async function importRun(){
-  const text=g('im-text').value.trim();
-  if(!text&&!F.imp.files.length){toast(L('ファイルを選ぶか、文章を貼り付けてください','Choose a file or paste text'));return}
+  const text=g('im-text').value.trim(), url=g('im-url').value.trim();
+  if(url&&!/^https?:\/\/\S+\.\S+/.test(url)){toast(L('URLは https:// から入れてください','Enter a URL starting with https://'));return}
+  if(!text&&!url&&!F.imp.files.length){toast(L('URLを入れるか、ファイルを選ぶか、文章を貼り付けてください','Enter a URL, choose a file, or paste text'));return}
   const btn=g('im-btn');btn.disabled=true;
   try{
     btn.textContent=L('アップロード中…','Uploading…');
     const metas=[];for(const f of F.imp.files)metas.push(await uploadDoc(f));
     if(text)metas.push(await uploadDoc(new File([text],L('貼り付けた文章.txt','pasted-text.txt'),{type:'text/plain'})));
     btn.textContent=L('AIが読み取り中…','AI is reading…');
-    const {data,error}=await sb.functions.invoke('my-schedule-ai',{body:{paths:metas.filter(m=>m.mime!=='text/plain').map(m=>m.path),text,lang:LANGV,today:today()}});
+    const {data,error}=await sb.functions.invoke('my-schedule-ai',{body:{paths:metas.filter(m=>m.mime!=='text/plain').map(m=>m.path),text,url,lang:LANGV,today:today()}});
     if(error){let code='';try{code=(await error.context.json()).error}catch(e){}throw new Error(aiErr(code))}
     const r=data.result, okDate=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'');
     const st=r.start_time&&/^\d\d:\d\d$/.test(r.start_time)?r.start_time:'', en=r.end_time&&/^\d\d:\d\d$/.test(r.end_time)?r.end_time:'';
     const prefill={title:r.title,type:EVT.some(x=>x[0]===r.type)?r.type:'match',date:okDate(r.date)?r.date:today(),edate:okDate(r.end_date)&&r.end_date>r.date?r.end_date:'',
       allDay:!!r.all_day||!st,time:st||'09:00',dur:st&&en&&toMin(en)>toMin(st)?toMin(en)-toMin(st):120,place:r.place||'',memo:r.address?L(`住所：${r.address}`,`Address: ${r.address}`):'',
-      info:{summary:String(r.summary||'').slice(0,4000),key:(r.key_points||[]).slice(0,30),deadlines:(r.deadlines||[]).filter(d=>okDate(d.date)).slice(0,8),uncertain:r.uncertain||'',at:today()},files:metas};
+      info:{summary:String(r.summary||'').slice(0,4000),key:(r.key_points||[]).slice(0,30),deadlines:(r.deadlines||[]).filter(d=>okDate(d.date)).slice(0,8),uncertain:r.uncertain||'',url,at:today()},files:metas};
     closeSheet();eventForm({kind:'event',prefill});
   }catch(e){toast(L('読み取れませんでした','Couldn’t read it'),e.message);btn.disabled=false;btn.textContent=L('もう一度読み取る','Try again')}
 }
-function aiErr(code){return {'not signed in':L('ログインし直してください','Please sign in again'),'coach only':L('コーチのIDでログインしてください','Sign in with a coach ID'),no_key:L('AIの設定（APIキー）がまだです','The AI key isn’t set up yet'),bad_key:L('APIキーが正しくありません','The API key is not valid'),busy:L('混み合っています。少し待ってからもう一度','Busy. Please try again shortly'),refused:L('この内容は読み取れませんでした','This content couldn’t be processed'),empty:L('中身が空です','Nothing to read')}[code]||L('通信できませんでした。電波を確認してください','Connection problem. Check your signal')}
+function aiErr(code){return {bad_url:L('このURLは開けません（https:// から始まる公開ページを入れてください）','This URL can’t be opened (use a public https:// page)'),fetch_failed:L('ページを開けませんでした。URLを確かめるか、スクショか文章の貼り付けで試してください','Couldn’t open the page. Check the URL, or try a screenshot or pasted text'),js_page:L('このページは中身を読み取れませんでした（ログインが必要、または画面を開いてから中身を作るサイト）。スクショか文章の貼り付けで試してください','Couldn’t read this page (login required or built by scripts). Try a screenshot or pasted text'),too_big:L('ページ（ファイル）が大きすぎます','The page or file is too large'),'not signed in':L('ログインし直してください','Please sign in again'),'coach only':L('コーチのIDでログインしてください','Sign in with a coach ID'),no_key:L('AIの設定（APIキー）がまだです','The AI key isn’t set up yet'),bad_key:L('APIキーが正しくありません','The API key is not valid'),busy:L('混み合っています。少し待ってからもう一度','Busy. Please try again shortly'),refused:L('この内容は読み取れませんでした','This content couldn’t be processed'),empty:L('中身が空です','Nothing to read')}[code]||L('通信できませんでした。電波を確認してください','Connection problem. Check your signal')}
 function aiPreview(pf){const i=pf.info||{};
   return `<div class="aibox"><span class="lbx">${L('AIが読み取りました。内容を確かめて保存してください','Read by AI. Check the details, then save')}</span>
     ${i.uncertain?`<div class="warnbox" style="margin:0"><b>⚠ ${L('確認してください','Please check')}</b><br>${esc(i.uncertain)}</div>`:''}
     ${i.summary?`<div class="sum">${esc(i.summary)}</div>`:''}
     ${(i.deadlines||[]).length?`<div><span class="lbx">${L('締切なども予定に入れる','Also add deadlines')}</span>${i.deadlines.map((d,k)=>`<label class="check" style="font-weight:400"><input type="checkbox" class="dl-pick" data-i="${k}" checked> ${dl(d.date)} ${esc(d.label)}</label>`).join('')}</div>`:''}
-    ${(pf.files||[]).length?`<div class="hint">${L('保存するもの','Saved with the event')}: ${pf.files.map(f=>esc(f.name)).join(L('、',', '))}</div>`:''}</div>`}
+    ${(pf.files||[]).length||i.url?`<div class="hint">${L('保存するもの','Saved with the event')}: ${[...(pf.files||[]).map(f=>esc(f.name)),...(i.url?[esc(i.url)]:[])].join(L('、',', '))}</div>`:''}</div>`}
 function infoCard(ev){const i=ev.info||{};
   return `<div class="aibox"><span class="lbx">${L('大会のまとめ','Event summary')}</span>
     ${i.summary?`<div class="sum">${esc(i.summary)}</div>`:''}
     ${(i.key||[]).length?`<dl class="kv">${i.key.map(k=>`<dt>${esc(k.label)}</dt><dd>${esc(k.value)}</dd>`).join('')}</dl>`:''}
     ${(i.deadlines||[]).length?`<div><span class="lbx">${L('締切・日程','Deadlines')}</span>${i.deadlines.map(d=>`<div style="font-size:14px">${dl(d.date)} ${esc(d.label)}</div>`).join('')}</div>`:''}
     ${i.uncertain?`<div class="hint">⚠ ${esc(i.uncertain)}</div>`:''}
+    ${i.url?`<div class="filerow"><a class="chip" href="${esc(i.url)}" target="_blank" rel="noopener">${L('大会のページを開く','Open event page')} ↗</a></div>`:''}
     ${(ev.files||[]).length?`<div class="filerow">${ev.files.map(f=>`<button class="chip" data-act="openFile" data-v="${esc(f.path)}">${f.mime==='application/pdf'?'PDF':f.mime==='text/plain'?L('文章','Text'):L('画像','Image')}: ${esc(f.name)}</button>`).join('')}</div>`:''}</div>`}
 async function openFile(path){
   const w=window.open('','_blank');
