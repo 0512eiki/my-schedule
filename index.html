@@ -60,6 +60,13 @@ textarea{resize:vertical;min-height:84px}
 nav.side{display:none}
 main{flex:1;min-width:0;padding-inline:16px;padding-block:16px 110px;max-width:1040px;margin:0 auto;width:100%;overflow-x:clip}
 header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+header.top.withx{padding-right:52px}
+.xhome{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:16px;z-index:25;width:40px;height:40px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:18px;box-shadow:0 4px 14px rgba(0,0,0,.15)}
+[data-swipe]{touch-action:pan-y}
+.slide-l{animation:slideL .22s ease-out}.slide-r{animation:slideR .22s ease-out}
+@keyframes slideL{from{transform:translateX(40px);opacity:.2}to{transform:none;opacity:1}}
+@keyframes slideR{from{transform:translateX(-40px);opacity:.2}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.slide-l,.slide-r{animation:none}}
 .brand{font-family:var(--f-display);font-weight:800;font-size:24px;letter-spacing:.04em}
 .brand small{display:block;font-family:var(--f-body);font-weight:500;font-size:11px;letter-spacing:.14em;color:var(--muted)}
 .btn{border:0;border-radius:999px;padding:10px 18px;font-weight:700;background:var(--ink);color:var(--bg);white-space:nowrap}
@@ -596,7 +603,9 @@ function render(){
   g('side').innerHTML=`${brand()}${nav}<button class="btn" data-act="newEvent">${L('＋ 予定を追加','＋ Add event')}</button><button class="btn ghost" data-act="newLesson" style="margin-top:8px">${L('＋ レッスンを記録','＋ Log a lesson')}</button><button class="gear" data-act="settings" style="margin-top:auto">${L('設定（料金・言語）','Settings (rates, language)')}</button>`;
   const prevTg=g('tgb');if(prevTg)UI.tgScroll=prevTg.scrollTop;
   const v={home,cal,stu:UI.sid?stuDetail:stuList,money:moneyView}[UI.tab]();
-  g('main').innerHTML=`<header class="top">${brand()}<button class="gear" data-act="settings">${L('設定','Settings')}</button></header><div class="sync" id="sync"></div>${v}`;
+  const xh=UI.tab!=='home';
+  g('main').innerHTML=`<header class="top ${xh?'withx':''}">${brand()}<button class="gear" data-act="settings">${L('設定','Settings')}</button></header>${xh?`<button class="xhome" data-act="goHome" aria-label="${L('ホームに戻る','Back to Home')}">✕</button>`:''}<div class="sync" id="sync"></div>${v}`;
+  if(UI.slide){const el=document.querySelector(`[data-swipe="${UI.slide.k}"]`);if(el)el.classList.add(UI.slide.d>0?'slide-l':'slide-r');UI.slide=null}
   updSync();
   const tg=g('tgb');
   if(tg){if(UI.tgScroll==null){const st=viewDays().flatMap(d=>itemsOn(d).filter(i=>!i.allDay).map(i=>i.start));UI.tgScroll=Math.max(0,((st.length?Math.min(...st):8*60)-30)*HOUR/60)}
@@ -714,7 +723,7 @@ function calendar(monthKey,sel,sid){
     cells+=`<button class="d ${d.getMonth()!==m-1?'out':''} ${k===today()?'today':''} ${k===sel?'sel':''}" data-act="${sid?'sday':'day'}" data-v="${k}" aria-label="${dl(k)} ${cnt}"><span class="n">${d.getDate()}</span>${evs}</button>`;
   }
   return `${sid?`<div class="calhead"><button data-act="scalMove" data-v="-1" aria-label="${L('前の月','Previous month')}">‹</button><h3>${ymTitle(y,m)}</h3><button data-act="scalMove" data-v="1" aria-label="${L('次の月','Next month')}">›</button></div>`:''}
-    <div class="cal">${L(DOW,DOW_EN).map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
+    <div class="cal" data-swipe="${sid?'scal':'cal'}">${L(DOW,DOW_EN).map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
     ${legend(!sid)}`;
 }
 function legend(withEvents){
@@ -753,7 +762,7 @@ function timeGrid(days){
   const all=days.map(d=>`<div>${itemsOn(d).filter(i=>i.allDay).map(i=>`<button class="blk evt allday" style="--c:${i.c}" data-act="openEvent" data-id="${i.o.id}">${esc(i.label)}</button>`).join('')}</div>`).join('');
   const cols=days.map(d=>`<div class="tg-col ${d===t?'today':''}" data-act="slot" data-v="${d}">${layout(itemsOn(d).filter(i=>!i.allDay)).map(blk).join('')}${d===t?`<div class="now" style="top:${nowM*HOUR/60}px"></div>`:''}</div>`).join('');
   const times=[...Array(23)].map((_,i)=>`<span style="top:${(i+1)*HOUR}px">${i+1}:00</span>`).join('');
-  return `<div class="tg" style="--n:${days.length};--h:${HOUR}px"><div class="tg-head"><div></div>${head}</div><div class="tg-all"><div class="lab">${L('終日','All day')}</div>${all}</div><div class="tg-body" id="tgb"><div class="tg-grid"><div class="tg-times">${times}</div>${cols}</div></div></div>
+  return `<div class="tg" data-swipe="cal" style="--n:${days.length};--h:${HOUR}px"><div class="tg-head"><div></div>${head}</div><div class="tg-all"><div class="lab">${L('終日','All day')}</div>${all}</div><div class="tg-body" id="tgb"><div class="tg-grid"><div class="tg-times">${times}</div>${cols}</div></div></div>
   <p class="hint" style="margin:8px 0 0">${L('空いている時間をタップすると、その時刻で予定を追加できます。','Tap an empty time slot to add an event at that time.')}</p>`;
 }
 function rangeTitle(ds){
@@ -1618,6 +1627,7 @@ document.addEventListener('click',e=>{
     case 'rpStep':{const c=g('rp-count');c.value=Math.min(150,Math.max(2,(+c.value||10)+ +v));refreshEv();break}
     case 'ePlace':g('e-place').value=v;break;
     case 'durPick':{const P=b.dataset.p,d=+v;F.tdur=d;setT(P+'-en',fromMin(toMin(readT(P+'-st'))+d));updDurChips(P);if(P==='f'){recalcAmounts();renderPay()}else refreshEv();break}
+    case 'goHome':UI.tab='home';UI.sid=null;closeSheet();render();scrollTo(0,0);break;
     case 'goMoney':UI.tab='money';UI.month=today().slice(0,7);render();scrollTo(0,0);break;
     case 'newPair':pairForm(null,b.dataset.sid);break;
     case 'editPair':pairForm(S.pairs.find(p=>p.id===id));break;
@@ -1791,6 +1801,16 @@ document.addEventListener('keydown',e=>{
   if((e.target.id==='lg-pw'||e.target.id==='lg-id')&&e.key==='Enter'&&!e.isComposing){e.preventDefault();document.querySelector('[data-act="login"]')?.click()}
   if(e.key==='Escape'){if(g('scope-ask')){g('scope-ask').remove();F.scopeCb=null}else closeSheet()}
 });
+/* カレンダーを左右にスワイプ：左へ＝次の月（週・日の表示なら次の期間）、右へ＝前 */
+let sw=null;
+document.addEventListener('touchstart',e=>{const el=e.target.closest('[data-swipe]');if(!el||g('layer').innerHTML||e.touches.length>1){sw=null;return}const t=e.touches[0];sw={k:el.dataset.swipe,x:t.clientX,y:t.clientY,t:Date.now()}},{passive:true});
+document.addEventListener('touchend',e=>{if(!sw)return;const t=e.changedTouches[0],dx=t.clientX-sw.x,dy=t.clientY-sw.y,k=sw.k;sw=null;
+  if(Math.abs(dx)<50||Math.abs(dx)<Math.abs(dy)*1.5)return;
+  const d=dx<0?1:-1;UI.slide={k,d};
+  if(k==='scal'){UI.scal=monthShift(UI.scal,d);UI.sday=null}
+  else{UI.tgScroll=null;if(UI.view==='month')UI.cal=monthShift(UI.cal,d);else UI.anchor=addDays(UI.anchor,d*{day:1,'3day':3,week:7}[UI.view])}
+  render();
+},{passive:true});
 let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(UI.tab==='cal'&&!g('layer').innerHTML)render()},200)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 start();
