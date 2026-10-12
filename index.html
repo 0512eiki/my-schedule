@@ -1298,6 +1298,10 @@ function importForm(){
   openSheet(L('案内から自動で入れる','Fill in from a document'),`
     <p class="hint" style="margin-top:0">${L('大会のページのURL・PDF・チラシのスクショ・メールの文章を入れると、AIが大会名・日付・場所などを読み取って予定を作ります。まとめも一緒に保存されます。','Add an event page URL, a PDF, a flyer screenshot, or text from an email. AI reads the name, dates and venue, and saves a summary with the event.')}</p>
     <div class="fld"><label for="im-url">${L('大会のページのURL','Event page URL')}</label><input id="im-url" type="url" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="https://..."></div>
+    <div class="warnbox" id="im-sc" hidden><b>${L('Smoothcomp のページは、URLだけでは読み取れません','Smoothcomp pages can’t be read from the URL alone')}</b><br>
+      ${L('ページを丸ごとPDFにして、下の「PDF・画像を選ぶ」から入れてください（URLは大会のページへのリンクとして残ります）。','Save the page as a PDF and add it below (the URL is kept as a link).')}<br>
+      <b>iPhone</b>：${L('Safariで大会のページを開く → 本体のボタンでスクリーンショット → 左下の小さな画像を押す → 上の「フルページ」→「完了」→「PDFを“ファイル”に保存」','Open the page in Safari → take a screenshot → tap the thumbnail → “Full Page” → “Done” → “Save PDF to Files”')}<br>
+      <b>Mac</b>：${L('Safariの「ファイル」→「PDFとして書き出す」','Safari “File” → “Export as PDF”')}</div>
     <label class="drop" for="im-files">${L('PDF・画像を選ぶ（6つまで）','Choose PDFs or images (up to 6)')}<input type="file" id="im-files" accept="application/pdf,image/*" multiple></label>
     <div id="im-list" class="chips" style="margin:8px 0 14px"></div>
     <div class="fld"><label for="im-text">${L('または、文章を貼り付け','Or paste text')}</label><textarea id="im-text" maxlength="100000" style="min-height:120px" placeholder="${L('Webページやメールの内容をそのまま貼り付けてください','Paste the web page or email as is')}"></textarea></div>
@@ -1308,13 +1312,16 @@ async function importRun(){
   const text=g('im-text').value.trim(), url=g('im-url').value.trim();
   if(url&&!/^https?:\/\/\S+\.\S+/.test(url)){toast(L('URLは https:// から入れてください','Enter a URL starting with https://'));return}
   if(!text&&!url&&!F.imp.files.length){toast(L('URLを入れるか、ファイルを選ぶか、文章を貼り付けてください','Enter a URL, choose a file, or paste text'));return}
+  /* Smoothcomp はロボット確認で中身を取れないので、ページを丸ごとPDFにして入れてもらう（URLはリンクとして残す） */
+  const scomp=/(^|\.)smoothcomp\.com$/i.test((()=>{try{return new URL(url).hostname}catch(e){return ''}})());
+  if(scomp&&!text&&!F.imp.files.length){g('im-sc').hidden=false;g('im-sc').scrollIntoView({block:'nearest'});return}
   const btn=g('im-btn');btn.disabled=true;
   try{
     btn.textContent=L('アップロード中…','Uploading…');
     const metas=[];for(const f of F.imp.files)metas.push(await uploadDoc(f));
     if(text)metas.push(await uploadDoc(new File([text],L('貼り付けた文章.txt','pasted-text.txt'),{type:'text/plain'})));
     btn.textContent=L('AIが読み取り中…','AI is reading…');
-    const {data,error}=await sb.functions.invoke('my-schedule-ai',{body:{paths:metas.filter(m=>m.mime!=='text/plain').map(m=>m.path),text,url,lang:LANGV,today:today()}});
+    const {data,error}=await sb.functions.invoke('my-schedule-ai',{body:{paths:metas.filter(m=>m.mime!=='text/plain').map(m=>m.path),text,url:scomp?'':url,lang:LANGV,today:today()}});
     if(error){let code='';try{code=(await error.context.json()).error}catch(e){}throw new Error(aiErr(code))}
     const r=data.result, okDate=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'');
     const st=r.start_time&&/^\d\d:\d\d$/.test(r.start_time)?r.start_time:'', en=r.end_time&&/^\d\d:\d\d$/.test(r.end_time)?r.end_time:'';
