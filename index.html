@@ -1304,7 +1304,7 @@ function importForm(){
       <b>Mac</b>：${L('Safariの「ファイル」→「PDFとして書き出す」','Safari “File” → “Export as PDF”')}</div>
     <label class="drop" for="im-files">${L('PDF・画像を選ぶ（6つまで）','Choose PDFs or images (up to 6)')}<input type="file" id="im-files" accept="application/pdf,image/*" multiple></label>
     <div id="im-list" class="chips" style="margin:8px 0 14px"></div>
-    <div class="fld"><label for="im-text">${L('または、文章を貼り付け','Or paste text')}</label><textarea id="im-text" maxlength="100000" style="min-height:120px" placeholder="${L('Webページやメールの内容をそのまま貼り付けてください','Paste the web page or email as is')}"></textarea></div>
+    <div class="fld"><label for="im-text">${L('または、文章を貼り付け（大会日程の一覧表もまとめてOK）','Or paste text (a whole schedule list is fine)')}</label><textarea id="im-text" maxlength="100000" style="min-height:120px" placeholder="${L('Webページやメールの内容をそのまま貼り付けてください','Paste the web page or email as is')}"></textarea></div>
     <div class="foot"><button class="btn block" data-act="importRun" id="im-btn">${L('読み取る','Read it')}</button><div class="hint" style="text-align:center">${L('20〜60秒ほどかかります','Takes about 20–60 seconds')}</div></div>`);
 }
 function renderImpList(){g('im-list').innerHTML=F.imp.files.map((f,i)=>`<span class="tag">${esc(f.name)} <button class="del" data-act="impDel" data-v="${i}" aria-label="${L('外す','Remove')}">✕</button></span>`).join('')}
@@ -1323,15 +1323,43 @@ async function importRun(){
     btn.textContent=L('AIが読み取り中…','AI is reading…');
     const {data,error}=await sb.functions.invoke('my-schedule-ai',{body:{paths:metas.filter(m=>m.mime!=='text/plain').map(m=>m.path),text,url:scomp?'':url,lang:LANGV,today:today()}});
     if(error){let code='';try{code=(await error.context.json()).error}catch(e){}throw new Error(aiErr(code))}
-    const r=data.result, okDate=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'');
-    const st=r.start_time&&/^\d\d:\d\d$/.test(r.start_time)?r.start_time:'', en=r.end_time&&/^\d\d:\d\d$/.test(r.end_time)?r.end_time:'';
-    const prefill={title:r.title,type:EVT.some(x=>x[0]===r.type)?r.type:'match',date:okDate(r.date)?r.date:today(),edate:okDate(r.end_date)&&r.end_date>r.date?r.end_date:'',
-      allDay:!!r.all_day||!st,time:st||'09:00',dur:st&&en&&toMin(en)>toMin(st)?toMin(en)-toMin(st):120,place:r.place||'',memo:r.address?L(`住所：${r.address}`,`Address: ${r.address}`):'',
-      info:{summary:String(r.summary||'').slice(0,4000),key:(r.key_points||[]).slice(0,30),deadlines:(r.deadlines||[]).filter(d=>okDate(d.date)).slice(0,8),uncertain:r.uncertain||'',url,at:today()},files:metas};
-    closeSheet();eventForm({kind:'event',prefill});
+    const list=(data.events||[data.result]).filter(Boolean).map(r=>toPrefill(r,metas,url));
+    closeSheet();
+    if(list.length>1)multiForm(list);else eventForm({kind:'event',prefill:list[0]});
   }catch(e){toast(L('読み取れませんでした','Couldn’t read it'),e.message);btn.disabled=false;btn.textContent=L('もう一度読み取る','Try again')}
 }
-function aiErr(code){return {bad_url:L('このURLは開けません（https:// から始まる公開ページを入れてください）','This URL can’t be opened (use a public https:// page)'),fetch_failed:L('ページを開けませんでした。URLを確かめるか、スクショか文章の貼り付けで試してください','Couldn’t open the page. Check the URL, or try a screenshot or pasted text'),js_page:L('このページは中身を読み取れませんでした（ログインが必要、または画面を開いてから中身を作るサイト）。スクショか文章の貼り付けで試してください','Couldn’t read this page (login required or built by scripts). Try a screenshot or pasted text'),too_big:L('ページ（ファイル）が大きすぎます','The page or file is too large'),'not signed in':L('ログインし直してください','Please sign in again'),'coach only':L('コーチのIDでログインしてください','Sign in with a coach ID'),no_key:L('AIの設定（APIキー）がまだです','The AI key isn’t set up yet'),bad_key:L('APIキーが正しくありません','The API key is not valid'),busy:L('混み合っています。少し待ってからもう一度','Busy. Please try again shortly'),refused:L('この内容は読み取れませんでした','This content couldn’t be processed'),empty:L('中身が空です','Nothing to read')}[code]||L('通信できませんでした。電波を確認してください','Connection problem. Check your signal')}
+const okDate=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'');
+function toPrefill(r,metas,url){
+  const st=r.start_time&&/^\d\d:\d\d$/.test(r.start_time)?r.start_time:'', en=r.end_time&&/^\d\d:\d\d$/.test(r.end_time)?r.end_time:'';
+  return {title:r.title,type:EVT.some(x=>x[0]===r.type)?r.type:'match',date:okDate(r.date)?r.date:today(),edate:okDate(r.end_date)&&r.end_date>r.date?r.end_date:'',
+    allDay:!!r.all_day||!st,time:st||'09:00',dur:st&&en&&toMin(en)>toMin(st)?toMin(en)-toMin(st):120,place:r.place||'',memo:r.address?L(`住所：${r.address}`,`Address: ${r.address}`):'',
+    info:{summary:String(r.summary||'').slice(0,4000),key:(r.key_points||[]).slice(0,30),deadlines:(r.deadlines||[]).filter(d=>okDate(d.date)).slice(0,8),uncertain:r.uncertain||'',url,at:today()},files:metas};
+}
+/* 一覧表から何件も見つかったとき：チェックした大会をまとめて入れる */
+const sameEvent=p=>S.events.some(e=>e.date===p.date&&e.title.replace(/\s/g,'')===String(p.title||'').replace(/\s/g,''));
+function multiForm(list){
+  F.multi={list,sel:new Set(list.map((p,i)=>i).filter(i=>!sameEvent(list[i])&&(list[i].edate||list[i].date)>=today()))};
+  const anyGuess=list.some(p=>p.info.uncertain);
+  openSheet(L(`${list.length}件の予定が見つかりました`,`${list.length} events found`),`
+    <p class="hint" style="margin-top:0">${L('入れたい予定にチェックを入れてください。登録済みのものと、もう終わった日のものは、最初からチェックを外しています。','Check the ones to add. Ones already added or already past start unchecked.')}</p>
+    ${anyGuess?`<div class="warnbox">⚠ ${L('年や月が書かれていない行は、曜日などから推定しています。日付を確かめてください（あとから予定を開いて直せます）。','Some rows had no year or month, so dates were estimated from weekdays. Please check them (you can edit each event later).')}</div>`:''}
+    <div class="chips" style="margin-bottom:8px"><button class="chip" data-act="multiAll" data-v="1">${L('すべて選択','Select all')}</button><button class="chip" data-act="multiAll" data-v="0">${L('すべて外す','Select none')}</button></div>
+    <div class="fld">${list.map((p,i)=>{const dup=sameEvent(p),past=(p.edate||p.date)<today();return `<label class="todo" style="cursor:pointer;align-items:flex-start"><input type="checkbox" class="mu-pick" data-i="${i}" ${F.multi.sel.has(i)?'checked':''}><span class="tx" style="white-space:normal;line-height:1.6">
+      <b>${dl(p.date)}${p.edate?'〜'+md(p.edate):''}</b> <span class="pill evt" style="--c:${evtColor(p.type)}">${evtName(p.type)}</span>${dup?` <span class="pill off">${L('登録済み','Already added')}</span>`:''}${past?` <span class="pill off">${L('終了','Past')}</span>`:''}<br>
+      ${esc(p.title)}${p.place?` <span class="hint">@ ${esc(p.place)}</span>`:''}${p.allDay?'':` <span class="hint">${p.time}〜</span>`}
+      ${p.info.uncertain?`<br><span class="hint">⚠ ${esc(p.info.uncertain)}</span>`:''}</span></label>`}).join('')}</div>
+    <div class="foot"><button class="btn block" data-act="multiSave" id="mu-btn">${multiLabel()}</button></div>`);
+}
+const multiLabel=()=>L(`チェックした ${F.multi.sel.size}件を予定に入れる`,`Add ${F.multi.sel.size} checked`);
+function multiSave(){
+  const picked=F.multi.list.filter((p,i)=>F.multi.sel.has(i));
+  if(!picked.length){toast(L('入れる予定にチェックを入れてください','Check the events to add'));return}
+  const ids=[];
+  picked.forEach(p=>{const id=uid();ids.push(id);S.events.push({id,type:p.type,title:p.title,date:p.date,time:p.allDay?'':p.time,dur:p.allDay?0:p.dur,allDay:p.allDay,edate:p.allDay?p.edate:'',place:p.place,memo:p.memo,seriesId:null,info:p.info,files:p.files?.length?p.files:undefined})});
+  if(!picked.length)return;
+  run(()=>{save();closeSheet();UI.anchor=picked[0].date;render()},L(`${picked.length}件の予定を入れました`,`Added ${picked.length} events`),picked.slice(0,3).map(p=>`${md(p.date)} ${p.title}`).join(L('・',' · '))+(picked.length>3?L(` ほか${picked.length-3}件`,` +${picked.length-3}`):'')).then(()=>checkClashAfter(ids));
+}
+function aiErr(code){return {too_many:L('予定が多すぎて読み切れませんでした。表を半分ずつ貼り付けてください','Too many events at once. Paste the list in two parts'),no_event:L('予定が見つかりませんでした','No events found'),bad_url:L('このURLは開けません（https:// から始まる公開ページを入れてください）','This URL can’t be opened (use a public https:// page)'),fetch_failed:L('ページを開けませんでした。URLを確かめるか、スクショか文章の貼り付けで試してください','Couldn’t open the page. Check the URL, or try a screenshot or pasted text'),js_page:L('このページは中身を読み取れませんでした（ログインが必要、または画面を開いてから中身を作るサイト）。スクショか文章の貼り付けで試してください','Couldn’t read this page (login required or built by scripts). Try a screenshot or pasted text'),too_big:L('ページ（ファイル）が大きすぎます','The page or file is too large'),'not signed in':L('ログインし直してください','Please sign in again'),'coach only':L('コーチのIDでログインしてください','Sign in with a coach ID'),no_key:L('AIの設定（APIキー）がまだです','The AI key isn’t set up yet'),bad_key:L('APIキーが正しくありません','The API key is not valid'),busy:L('混み合っています。少し待ってからもう一度','Busy. Please try again shortly'),refused:L('この内容は読み取れませんでした','This content couldn’t be processed'),empty:L('中身が空です','Nothing to read')}[code]||L('通信できませんでした。電波を確認してください','Connection problem. Check your signal')}
 function aiPreview(pf){const i=pf.info||{};
   return `<div class="aibox"><span class="lbx">${L('AIが読み取りました。内容を確かめて保存してください','Read by AI. Check the details, then save')}</span>
     ${i.uncertain?`<div class="warnbox" style="margin:0"><b>⚠ ${L('確認してください','Please check')}</b><br>${esc(i.uncertain)}</div>`:''}
@@ -1676,6 +1704,8 @@ document.addEventListener('click',e=>{
       F.confirmDelE=false;doDel('one');break}
     case 'importOpen':closeSheet();importForm();break;
     case 'importRun':importRun();break;
+    case 'multiAll':{const on=v==='1';document.querySelectorAll('.mu-pick').forEach(x=>{x.checked=on;const i=+x.dataset.i;on?F.multi.sel.add(i):F.multi.sel.delete(i)});g('mu-btn').textContent=multiLabel();break}
+    case 'multiSave':multiSave();break;
     case 'impDel':F.imp.files.splice(+v,1);renderImpList();break;
     case 'openFile':openFile(v);break;
     case 'clashOpen':clashForm([id]);break;
@@ -1784,6 +1814,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const id=e.target.id;
   if(id==='im-files'){F.imp.files=[...F.imp.files,...e.target.files].slice(0,6);e.target.value='';renderImpList()}
+  if(e.target.classList.contains('mu-pick')){const i=+e.target.dataset.i;e.target.checked?F.multi.sel.add(i):F.multi.sel.delete(i);g('mu-btn').textContent=multiLabel()}
   if(e.target.classList.contains('dl-pick')){const i=+e.target.dataset.i;e.target.checked?F.e.dlSel.add(i):F.e.dlSel.delete(i)}
   if(id==='f-book'){g('f-bookbox').hidden=!e.target.checked;g('f-bookhint').hidden=!e.target.checked}
   if(id==='k-paid')g('k-mbox').hidden=!e.target.checked;
