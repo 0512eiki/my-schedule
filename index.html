@@ -310,7 +310,20 @@ td.r,th.r{text-align:right;font-family:var(--f-num)}
   .overlay{align-items:center}
   .sheet{border-radius:18px;max-height:88vh}
 }
-@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+/* 画面（シート）を開く・閉じるときの控えめな動き */
+.overlay{animation:ovIn .2s ease-out}
+.overlay>.sheet{animation:shUp .26s cubic-bezier(.2,.8,.2,1)}
+.overlay.closing{animation:ovOut .17s ease-in forwards;pointer-events:none}
+.overlay.closing>.sheet{animation:shDown .17s ease-in forwards}
+.overlay.ask>.dialog{animation:shPop .2s cubic-bezier(.2,.8,.2,1)}
+@keyframes ovIn{from{background:rgba(10,14,30,0)}}
+@keyframes ovOut{to{background:rgba(10,14,30,0)}}
+@keyframes shUp{from{transform:translateY(32px);opacity:.5}}
+@keyframes shDown{to{transform:translateY(32px);opacity:0}}
+@keyframes shPop{from{transform:scale(.97);opacity:0}}
+@keyframes shFade{to{transform:scale(.98);opacity:0}}
+@media (min-width:900px){.overlay>.sheet{animation-name:shPop}.overlay.closing>.sheet{animation-name:shFade}}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}.overlay,.overlay>.sheet,.overlay.closing,.overlay.closing>.sheet,.overlay.ask>.dialog{animation:none}}
 </style>
 </head>
 <body>
@@ -509,12 +522,12 @@ async function pull(){
   if(!data.find(r=>r.kind==='settings')?.data?.homeTz)fix=true;
   if(S.settings.tz!==deviceTz()){S.settings.tz=deviceTz();fix=true}
   writeCache();
-  if(changed&&!g('layer').innerHTML)render();else updSync();
+  if(changed&&!sheetOpen())render();else updSync();
   if(fix)save().catch(()=>{});
 }
 function updSync(bad){const el=g('sync');if(!el)return;const b=bad||DIRTY;el.className='sync'+(b?' bad':'');el.textContent=b?L('未送信の変更があります（つながると送ります）','Unsent changes (will send when online)'):''}
 addEventListener('online',()=>{if(DIRTY)save().then(()=>toast(L('✓ 未送信の変更を送りました','✓ Unsent changes saved'))).catch(()=>{})});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&SESSION){if(checkTzChange()&&!g('layer').innerHTML)render();pull()}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&SESSION){if(checkTzChange()&&!sheetOpen())render();pull()}});
 
 /* ---------- ログイン（柔道ノートのコーチの ID とパスワード） ---------- */
 async function enter(user){
@@ -962,7 +975,16 @@ function openSheet(title,body){
   g('layer').innerHTML=`<div class="overlay" data-act="closeBg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sh"><b>${esc(title)}</b><button class="x" data-act="close" aria-label="${L('閉じる','Close')}">✕</button></div>${body}</div></div>`;
   document.body.style.overflow='hidden';
 }
-function closeSheet(){g('layer').innerHTML='';document.body.style.overflow=''}
+const sheetOpen=()=>!!g('layer').querySelector('.overlay:not(.closing)');
+function closeSheet(){
+  document.body.style.overflow='';
+  const ov=g('layer').querySelector('.overlay:not(.ask)');
+  if(!ov||matchMedia('(prefers-reduced-motion: reduce)').matches){g('layer').innerHTML='';return}
+  /* 少し下がりながら消してから取り除く（その間に別の画面が開いたら、そちらはそのまま） */
+  [...g('layer').children].forEach(x=>x.classList.add('closing'));
+  const kids=[...g('layer').children];
+  setTimeout(()=>kids.forEach(x=>x.remove()),170);
+}
 function g(id){return document.getElementById(id)}
 const priorLabel=()=>L('このアプリを使う前に受け取った分（売上の集計に入れない）','Received before I started using this app (don’t count in income)');
 function recvDateHtml(P,val,lessonDate){
@@ -1900,7 +1922,7 @@ document.addEventListener('keydown',e=>{
 });
 /* カレンダーを左右にスワイプ：左へ＝次の月（週・日の表示なら次の期間）、右へ＝前 */
 let sw=null;
-document.addEventListener('touchstart',e=>{const el=e.target.closest('[data-swipe]');if(!el||g('layer').innerHTML||e.touches.length>1){sw=null;return}const t=e.touches[0];sw={k:el.dataset.swipe,x:t.clientX,y:t.clientY,t:Date.now()}},{passive:true});
+document.addEventListener('touchstart',e=>{const el=e.target.closest('[data-swipe]');if(!el||sheetOpen()||e.touches.length>1){sw=null;return}const t=e.touches[0];sw={k:el.dataset.swipe,x:t.clientX,y:t.clientY,t:Date.now()}},{passive:true});
 document.addEventListener('touchend',e=>{if(!sw)return;const t=e.changedTouches[0],dx=t.clientX-sw.x,dy=t.clientY-sw.y,k=sw.k;sw=null;
   if(Math.abs(dx)<50||Math.abs(dx)<Math.abs(dy)*1.5)return;
   const d=dx<0?1:-1;UI.slide={k,d};
@@ -1908,7 +1930,7 @@ document.addEventListener('touchend',e=>{if(!sw)return;const t=e.changedTouches[
   else{UI.tgScroll=null;if(UI.view==='month')UI.cal=monthShift(UI.cal,d);else UI.anchor=addDays(UI.anchor,d*{day:1,'3day':3,week:7}[UI.view])}
   render();
 },{passive:true});
-let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(UI.tab==='cal'&&!g('layer').innerHTML)render()},200)});
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(UI.tab==='cal'&&!sheetOpen())render()},200)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 start();
 </script>
