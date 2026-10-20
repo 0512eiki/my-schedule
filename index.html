@@ -311,16 +311,16 @@ td.r,th.r{text-align:right;font-family:var(--f-num)}
   .sheet{border-radius:18px;max-height:88vh}
 }
 /* 画面（シート）を開く・閉じるときの控えめな動き */
-.overlay{animation:ovIn .38s ease-out}
-.overlay>.sheet{animation:shUp .46s cubic-bezier(.22,1,.36,1)}
+.overlay{animation:ovIn .5s ease-out}
+.overlay>.sheet{animation:shUp .6s cubic-bezier(.16,1,.3,1)}
 .overlay.closing{animation:ovOut .28s ease-out forwards;pointer-events:none}
 .overlay.closing>.sheet{animation:shDown .28s cubic-bezier(.4,0,.6,1) forwards}
-.overlay.ask>.dialog{animation:shPop .4s cubic-bezier(.22,1,.36,1)}
+.overlay.ask>.dialog{animation:shPop .55s cubic-bezier(.16,1,.3,1)}
 @keyframes ovIn{from{background:rgba(10,14,30,0)}}
 @keyframes ovOut{to{background:rgba(10,14,30,0)}}
-@keyframes shUp{from{transform:translateY(18px) scale(.985);opacity:0}}
+@keyframes shUp{0%{transform:translateY(12px) scale(.97);opacity:0;filter:blur(6px)}60%{filter:blur(0)}100%{transform:none;opacity:1;filter:none}}
 @keyframes shDown{to{transform:translateY(14px) scale(.99);opacity:0}}
-@keyframes shPop{from{transform:translateY(6px) scale(.96);opacity:0}}
+@keyframes shPop{0%{transform:translateY(6px) scale(.95);opacity:0;filter:blur(6px)}60%{filter:blur(0)}100%{transform:none;opacity:1;filter:none}}
 @keyframes shFade{to{transform:scale(.985);opacity:0}}
 @media (min-width:900px){.overlay>.sheet{animation-name:shPop}.overlay.closing>.sheet{animation-name:shFade}}
 @media (prefers-reduced-motion:reduce){.toast{transition:none}.overlay,.overlay>.sheet,.overlay.closing,.overlay.closing>.sheet,.overlay.ask>.dialog{animation:none}}
