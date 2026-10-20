@@ -420,20 +420,49 @@ const defaultSettings=()=>({solo30:50,pair60:100,lang:LANGV,remind:'21:00',tz:de
 const emptyState=()=>({settings:defaultSettings(),students:[],packages:[],lessons:[],events:[],pairs:[]});
 let S=emptyState(), SNAP=new Map(), SESSION=null, LOADED=false, DIRTY=false;
 const KINDS=[['students','student'],['lessons','lesson'],['events','event'],['packages','package'],['pairs','pair']];
+/* ---------- 時間帯：予定は「入れたときの時間帯（tz）」で保存し、画面ではいま居る場所の時刻で表示する ----------
+   iPhone は現地に着くと時間帯が自動で変わる → その時間帯（VIEWTZ）に直して表示（Googleカレンダーと同じ考え方）。
+   終日の予定は日付のまま。tz のない古い予定は「ふだんの時間帯」（settings.homeTz）で入れたものとして扱う。 */
+let VIEWTZ=deviceTz();
+function tzOff(tz,ms){try{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).formatToParts(new Date(ms)).map(x=>[x.type,x.value]));
+  return Date.UTC(+p.year,+p.month-1,+p.day,+p.hour%24,+p.minute)-ms}catch(e){return 0}}
+function zToUtc(date,time,tz){const [y,m,d]=date.split('-').map(Number),[h,mi]=time.split(':').map(Number);const g0=Date.UTC(y,m-1,d,h,mi);let t=g0-tzOff(tz,g0);const o2=tzOff(tz,t);if(g0-o2!==t)t=g0-o2;return t}
+function utcToZ(ms,tz){const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).formatToParts(new Date(ms)).map(x=>[x.type,x.value]));
+  return {date:`${p.year}-${p.month}-${p.day}`,time:`${pad(+p.hour%24)}:${p.minute}`}}
+function convTz(o,from,to){if(!o.time||o.allDay||!from||!to||from===to)return o;try{const r=utcToZ(zToUtc(o.date,o.time,from),to);return {...o,date:r.date,time:r.time}}catch(e){return o}}
+const homeTz=()=>S.settings.homeTz||VIEWTZ;
+const tzCity=tz=>String(tz||'').split('/').pop().replace(/_/g,' ');
+const awayFromHome=()=>homeTz()!==VIEWTZ;
+const TZK=['lesson','event'];
 function itemsMap(st){
   const m=new Map([['settings|main',JSON.stringify(st.settings)]]);
-  KINDS.forEach(([arr,k])=>st[arr].forEach(o=>m.set(`${k}|${o.id}`,JSON.stringify(o))));
+  KINDS.forEach(([arr,k])=>st[arr].forEach(o=>{
+    if(TZK.includes(k)&&o.time&&!o.allDay&&!o.tz)o.tz=VIEWTZ;   // 新しく入れた予定は、いま居る時間帯で入れたもの
+    m.set(`${k}|${o.id}`,JSON.stringify(TZK.includes(k)?convTz(o,VIEWTZ,o.tz):o));
+  }));
   return m;
 }
 function fromRows(rows){
   const st=emptyState();
-  rows.forEach(r=>{if(r.kind==='settings')st.settings={...defaultSettings(),...r.data};else{const a=KINDS.find(x=>x[1]===r.kind);if(a)st[a[0]].push(r.data)}});
+  rows.forEach(r=>{if(r.kind==='settings')st.settings={...defaultSettings(),...r.data}});
+  if(!st.settings.homeTz)st.settings.homeTz=st.settings.tz||VIEWTZ;
+  rows.forEach(r=>{if(r.kind==='settings')return;const a=KINDS.find(x=>x[1]===r.kind);if(!a)return;
+    let o=r.data;if(TZK.includes(r.kind)&&o.time&&!o.allDay){o={...o,tz:o.tz||st.settings.homeTz};o=convTz(o,o.tz,VIEWTZ)}
+    st[a[0]].push(o)});
   return st;
+}
+const rowsOfMap=m=>[...m].map(([k,v])=>{const i=k.indexOf('|');return {kind:k.slice(0,i),id:k.slice(i+1),data:JSON.parse(v)}});
+/* 時間帯が変わったら（現地に着いた・帰ってきた）、表示を作り直す */
+function checkTzChange(){
+  const now=deviceTz();if(now===VIEWTZ||!LOADED)return false;
+  const rows=rowsOfMap(itemsMap(S));VIEWTZ=now;S=fromRows(rows);
+  toast(L(`🌐 時間帯が ${tzCity(now)} になりました`,`🌐 Time zone is now ${tzCity(now)}`),L('予定をこの場所の時刻で表示しています','Showing your schedule in local time'));
+  return true;
 }
 /* この端末にも控えを置く（電波がなくても開けるように・すぐ表示できるように） */
 const cacheKey=()=>'my-schedule-cache-'+(SESSION?.uid||'');
-function writeCache(){try{localStorage.setItem(cacheKey(),JSON.stringify({S,snap:[...SNAP],dirty:DIRTY}))}catch(e){}}
-function readCache(){try{const c=JSON.parse(localStorage.getItem(cacheKey())||'null');return c&&c.S?c:null}catch(e){return null}}
+function writeCache(){try{localStorage.setItem(cacheKey(),JSON.stringify({rows:[...itemsMap(S)],snap:[...SNAP],dirty:DIRTY}))}catch(e){}}
+function readCache(){try{const c=JSON.parse(localStorage.getItem(cacheKey())||'null');return c&&c.rows?c:null}catch(e){return null}}
 
 /* 変わった分だけ送る（生徒・レッスン・予定を1件ずつ） */
 async function pushChanges(){
@@ -470,12 +499,14 @@ async function pull(){
   if(DIRTY){try{await save()}catch(e){return}}
   const {data,error}=await sb.from('ms_items').select('kind,id,data');
   if(error){updSync(true);return}
+  VIEWTZ=deviceTz();
   const st=fromRows(data||[]);
   const changed=JSON.stringify([...itemsMap(st)].sort())!==JSON.stringify([...SNAP].sort())||!LOADED;
   S=st;SNAP=itemsMap(st);LOADED=true;
   LANGV=S.settings.lang||LANGV;
   let fix=false;
   if(!data.some(r=>r.kind==='settings')){fix=true;SNAP.delete('settings|main')}
+  if(!data.find(r=>r.kind==='settings')?.data?.homeTz)fix=true;
   if(S.settings.tz!==deviceTz()){S.settings.tz=deviceTz();fix=true}
   writeCache();
   if(changed&&!g('layer').innerHTML)render();else updSync();
@@ -483,7 +514,7 @@ async function pull(){
 }
 function updSync(bad){const el=g('sync');if(!el)return;const b=bad||DIRTY;el.className='sync'+(b?' bad':'');el.textContent=b?L('未送信の変更があります（つながると送ります）','Unsent changes (will send when online)'):''}
 addEventListener('online',()=>{if(DIRTY)save().then(()=>toast(L('✓ 未送信の変更を送りました','✓ Unsent changes saved'))).catch(()=>{})});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&SESSION)pull()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&SESSION){if(checkTzChange()&&!g('layer').innerHTML)render();pull()}});
 
 /* ---------- ログイン（柔道ノートのコーチの ID とパスワード） ---------- */
 async function enter(user){
@@ -492,7 +523,8 @@ async function enter(user){
   if(!prof||prof.role!=='coach'){await sb.auth.signOut();SESSION=null;UI.loginErr=L('My schedule はコーチだけが使えます。','My schedule is for coaches only.');render();return}
   SESSION={uid:user.id,login:prof.login_id,name:prof.display_name};
   const c=readCache();
-  if(c){S=c.S;S.pairs=S.pairs||[];SNAP=new Map(c.snap);DIRTY=!!c.dirty;LANGV=S.settings.lang||LANGV;LOADED=true}else{S=emptyState();SNAP=new Map();LOADED=false}
+  VIEWTZ=deviceTz();
+  if(c){S=fromRows(rowsOfMap(new Map(c.rows)));SNAP=new Map(c.snap);DIRTY=!!c.dirty;LANGV=S.settings.lang||LANGV;LOADED=true}else{S=emptyState();SNAP=new Map();LOADED=false}
   render();
   await pull();
   refreshPushState();
@@ -604,7 +636,8 @@ function render(){
   const prevTg=g('tgb');if(prevTg)UI.tgScroll=prevTg.scrollTop;
   const v={home,cal,stu:UI.sid?stuDetail:stuList,money:moneyView}[UI.tab]();
   const xh=UI.tab!=='home';
-  g('main').innerHTML=`<header class="top ${xh?'withx':''}">${brand()}<button class="gear" data-act="settings">${L('設定','Settings')}</button></header>${xh?`<button class="xhome" data-act="goHome" aria-label="${L('ホームに戻る','Back to Home')}">✕</button>`:''}<div class="sync" id="sync"></div>${v}`;
+  const tzb=awayFromHome()&&(UI.tab==='home'||UI.tab==='cal')?`<div class="notice"><span>🌐 ${L(`いまは <b>${esc(tzCity(VIEWTZ))}</b> の時刻で表示しています（ふだんは ${esc(tzCity(homeTz()))}）`,`Showing <b>${esc(tzCity(VIEWTZ))}</b> local time (home: ${esc(tzCity(homeTz()))})`)}</span></div>`:'';
+  g('main').innerHTML=`<header class="top ${xh?'withx':''}">${brand()}<button class="gear" data-act="settings">${L('設定','Settings')}</button></header>${tzb}${xh?`<button class="xhome" data-act="goHome" aria-label="${L('ホームに戻る','Back to Home')}">✕</button>`:''}<div class="sync" id="sync"></div>${v}`;
   if(UI.slide){const el=document.querySelector(`[data-swipe="${UI.slide.k}"]`);if(el)el.classList.add(UI.slide.d>0?'slide-l':'slide-r');UI.slide=null}
   updSync();
   const tg=g('tgb');
@@ -789,6 +822,14 @@ function cal(){
   </div>`;
 }
 
+/* 日にちを押したら、その日の予定をポップアップで出す（スマホ） */
+function dayPopup(date,sid){
+  const its=sid?sortL(S.lessons.filter(l=>l.sid===sid&&l.date===date)).map(l=>lessonRow(l,false,sid)):itemsOn(date,UI.filter).map(it=>itemRow(it,false));
+  const clear=!sid&&skippable(date).length;
+  openSheet(dl(date),`${its.length?its.join(''):`<div class="empty">${L('この日の予定はありません。','Nothing on this day.')}</div>`}
+    <div class="foot"><button class="btn block" data-act="newEvent" data-date="${date}" ${sid?`data-sid="${sid}"`:''}>${L('＋ この日に予定を追加','＋ Add event on this day')}</button>${clear?`<button class="btn block danger" data-act="skipDay" data-v="${date}">${L('この日の予定をまとめて消す','Clear this day')}</button>`:''}</div>`);
+}
+
 /* 生徒 */
 function rateLabel(s){return s.custom30!=null?L(`30分 ${money(s.custom30)}（個別）`,`${money(s.custom30)} / 30 min (custom)`):L(`30分 ${money(S.settings.solo30)}`,`${money(S.settings.solo30)} / 30 min`)}
 function stuList(){
@@ -959,6 +1000,7 @@ function lessonForm(l,preset={}){
     <div class="two"><div class="fld"><label for="f-date">${L('日付','Date')}</label><input type="date" id="f-date" value="${base.date}"></div>
     <div class="fld"><span class="lb">${L('時間','Time')}</span><div class="trow">${timeSel('f-st',base.time)}<span class="arrow">→</span>${timeSel('f-en',fromMin(toMin(base.time)+base.dur))}</div></div></div>
     ${durChips('f',base.dur)}
+    ${tzNote(l)}
     <div class="fld"><label for="f-place">${L('場所','Location')}</label><input id="f-place" maxlength="120" value="${esc(base.place||'')}" placeholder="${L('例：WJA道場','e.g. WJA Dojo')}"></div>
     <div class="fld"><label for="f-plan">${L('この日にやる予定','Plan for this lesson')}</label><textarea id="f-plan" maxlength="2000" style="min-height:60px" placeholder="${L('予定を入れるときに書いておくと、当日ここに出ます','Write it when scheduling and it shows up here on the day')}">${esc(base.plan)}</textarea></div>
     <div id="f-todos"></div>
@@ -1129,6 +1171,13 @@ function recentPlaces(){
   const c={};[...S.lessons,...S.events].forEach(x=>{if(x.place)c[x.place]=(c[x.place]||0)+1});
   return Object.entries(c).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
 }
+/* 予定の画面：いま居る場所と違う時間帯で入れた予定なら、元の時刻も出す */
+function tzNote(o){
+  const parts=[];
+  if(o&&o.tz&&o.tz!==VIEWTZ&&o.time&&!o.allDay){const r=convTz(o,VIEWTZ,o.tz);parts.push(L(`入れたときの時刻：${md(r.date)} ${r.time}（${tzCity(o.tz)}）`,`Originally ${md(r.date)} ${r.time} (${tzCity(o.tz)})`))}
+  if(awayFromHome())parts.push(L(`時刻は ${tzCity(VIEWTZ)} の時刻です`,`Times are in ${tzCity(VIEWTZ)} time`));
+  return parts.length?`<div class="hint" style="margin:-6px 0 12px">🌐 ${parts.map(esc).join(' ・ ')}</div>`:'';
+}
 function lastTimeOf(sid){const l=sortL(S.lessons.filter(x=>x.sid===sid&&x.status!=='cancelled')).pop();return l?l.time:null}
 function eventForm(o={}){
   const ev=o.ev;
@@ -1166,6 +1215,7 @@ function eventForm(o={}){
       <div id="e-edbox" class="drow"><span class="lb">${L('終わりの日（何日か続くとき）','Last day (multi-day)')}</span><input type="date" id="e-edate" value="${evx.edate||''}"></div>
       <div class="trow e-times">${timeSel('e-st',time)}<span class="arrow">→</span>${timeSel('e-en',fromMin(toMin(time)+F.tdur))}<span class="dlabel" id="e-dlabel"></span></div>
       <div class="chips e-times" id="e-durs">${DURS.map(d=>`<button class="chip" data-act="durPick" data-p="e" data-v="${d}" aria-pressed="${d===F.tdur}">${d}${L('分',' min')}</button>`).join('')}</div>
+      ${tzNote(ev)}
       ${ev?(later.length?`<div class="hint">↻ ${L(`繰り返しの予定です（このあとに${later.length}件）。保存するときに、ほかの予定も変えるか聞きます。`,`Repeating event (${later.length} more after this). You’ll be asked whether to change the others when you save.`)}</div>`:''):`<div><span class="lb">${L('繰り返し','Repeat')}</span><div class="chips" style="margin-top:6px">${RP.map(([k,n])=>`<button class="chip" data-act="rpPick" data-v="${k}" aria-pressed="${k==='none'}">${n}</button>`).join('')}</div>
         <select id="rp" hidden>${RP.map(([k])=>`<option value="${k}">${k}</option>`).join('')}</select>
         <div id="rp-end" hidden style="margin-top:8px"><div class="drow"><select id="rp-mode" style="width:auto"><option value="count">${L('回数で終わる','Ends after')}</option><option value="until">${L('日付で終わる','Ends on')}</option></select>
@@ -1561,7 +1611,10 @@ function settingsForm(){
     <div class="fld"><span class="lb">${L('通知：前の日の夜に翌日の予定','Notification: tomorrow’s schedule the night before')}</span>
       <div class="two"><div class="fld" style="margin:0"><label for="st-remind">${L('届く時刻','Time')}</label><select id="st-remind"><option value="off" ${S.settings.remind==='off'?'selected':''}>${L('送らない','Off')}</option>${[...Array(48)].map((_,i)=>{const t=fromMin(i*30);return `<option value="${t}" ${S.settings.remind===t?'selected':''}>${t}</option>`}).join('')}</select></div></div>
       <div id="push-box">${pushBox()}</div>
-      <div class="hint">${L('予定がない日は届きません。時刻はこの端末の時間帯（','No notification on days with nothing scheduled. Time zone: ')}${esc(S.settings.tz||deviceTz())}${L('）で数えます。',' (this device).')}</div></div>
+      <div class="hint">${L('予定がない日は届きません。時刻は、いま居る場所の時間帯（','No notification on days with nothing scheduled. Uses your current time zone (')}${esc(tzCity(VIEWTZ))}${L('）で数えます。',').')}</div></div>
+    <div class="fld"><span class="lb">${L('時間帯','Time zone')}</span>
+      <div class="hint" style="margin-bottom:6px">${L(`ふだんの時間帯：<b>${esc(tzCity(homeTz()))}</b> ・ いま：<b>${esc(tzCity(VIEWTZ))}</b><br>旅行先に着いてiPhoneの時刻が変わると、予定も現地の時刻で表示されます。`,`Home: <b>${esc(tzCity(homeTz()))}</b> · Now: <b>${esc(tzCity(VIEWTZ))}</b><br>When your iPhone switches to local time abroad, your schedule follows.`)}</div>
+      ${awayFromHome()?`<button class="btn sm ghost" data-act="setHomeTz">${L(`${tzCity(VIEWTZ)} をふだんの時間帯にする（引っ越したとき）`,`Make ${tzCity(VIEWTZ)} my home time zone`)}</button>`:''}</div>
     <div class="fld"><span class="lb">${L('料金','Rates')}</span></div>
     <div class="two"><div class="fld"><label for="st-solo">${L('マンツーマン：30分あたり（$）','Private: per 30 min ($)')}</label><input type="number" id="st-solo" inputmode="decimal" value="${S.settings.solo30}"></div>
     <div class="fld"><label for="st-pair">${L('ペア：1時間あたり・2人の合計（$）','Pair: per hour, both students total ($)')}</label><input type="number" id="st-pair" inputmode="decimal" value="${S.settings.pair60}"></div></div>
@@ -1666,6 +1719,8 @@ document.addEventListener('click',e=>{
     case 'rpStep':{const c=g('rp-count');c.value=Math.min(150,Math.max(2,(+c.value||10)+ +v));refreshEv();break}
     case 'ePlace':g('e-place').value=v;break;
     case 'durPick':{const P=b.dataset.p,d=+v;F.tdur=d;setT(P+'-en',fromMin(toMin(readT(P+'-st'))+d));updDurChips(P);if(P==='f'){recalcAmounts();renderPay()}else refreshEv();break}
+    case 'setHomeTz':[...SNAP.keys()].forEach(k=>{if(/^(lesson|event)\|/.test(k))SNAP.delete(k)});/* 時間帯の書いていない古い予定にも、いまの時間帯をはっきり書いて送り直す */
+      S.settings.homeTz=VIEWTZ;run(()=>{save();closeSheet();render()},L(`ふだんの時間帯を ${tzCity(VIEWTZ)} にしました`,`Home time zone set to ${tzCity(VIEWTZ)}`));break;
     case 'goHome':UI.tab='home';UI.sid=null;closeSheet();render();scrollTo(0,0);break;
     case 'goMoney':UI.tab='money';UI.month=today().slice(0,7);render();scrollTo(0,0);break;
     case 'newPair':pairForm(null,b.dataset.sid);break;
@@ -1726,8 +1781,8 @@ document.addEventListener('click',e=>{
     case 'newLesson':lessonForm(null,{date:b.dataset.date,sid:b.dataset.sid});break;
     case 'openLesson':lessonForm(byId(id));break;
     case 'close':case 'closeBg':closeSheet();break;
-    case 'day':UI.day=v;UI.anchor=v;render();break;
-    case 'sday':UI.sday=UI.sday===v?null:v;render();break;
+    case 'day':UI.day=v;UI.anchor=v;if(innerWidth<900)dayPopup(v);else render();break;
+    case 'sday':if(innerWidth<900){UI.sday=v;dayPopup(v,UI.sid)}else{UI.sday=UI.sday===v?null:v;render()}break;
     case 'scalMove':UI.scal=monthShift(UI.scal,+v);UI.sday=null;render();break;
     case 'monMove':UI.month=monthShift(UI.month,+v);render();break;
     case 'openStu':UI.tab='stu';UI.sid=id;UI.sday=null;UI.scal=today().slice(0,7);render();scrollTo(0,0);break;
