@@ -311,17 +311,17 @@ td.r,th.r{text-align:right;font-family:var(--f-num)}
   .sheet{border-radius:18px;max-height:88vh}
 }
 /* 画面（シート）を開く・閉じるときの控えめな動き */
-.overlay{animation:ovIn .2s ease-out}
-.overlay>.sheet{animation:shUp .26s cubic-bezier(.2,.8,.2,1)}
-.overlay.closing{animation:ovOut .17s ease-in forwards;pointer-events:none}
-.overlay.closing>.sheet{animation:shDown .17s ease-in forwards}
-.overlay.ask>.dialog{animation:shPop .2s cubic-bezier(.2,.8,.2,1)}
+.overlay{animation:ovIn .38s ease-out}
+.overlay>.sheet{animation:shUp .46s cubic-bezier(.22,1,.36,1)}
+.overlay.closing{animation:ovOut .28s ease-out forwards;pointer-events:none}
+.overlay.closing>.sheet{animation:shDown .28s cubic-bezier(.4,0,.6,1) forwards}
+.overlay.ask>.dialog{animation:shPop .4s cubic-bezier(.22,1,.36,1)}
 @keyframes ovIn{from{background:rgba(10,14,30,0)}}
 @keyframes ovOut{to{background:rgba(10,14,30,0)}}
-@keyframes shUp{from{transform:translateY(32px);opacity:.5}}
-@keyframes shDown{to{transform:translateY(32px);opacity:0}}
-@keyframes shPop{from{transform:scale(.97);opacity:0}}
-@keyframes shFade{to{transform:scale(.98);opacity:0}}
+@keyframes shUp{from{transform:translateY(18px) scale(.985);opacity:0}}
+@keyframes shDown{to{transform:translateY(14px) scale(.99);opacity:0}}
+@keyframes shPop{from{transform:translateY(6px) scale(.96);opacity:0}}
+@keyframes shFade{to{transform:scale(.985);opacity:0}}
 @media (min-width:900px){.overlay>.sheet{animation-name:shPop}.overlay.closing>.sheet{animation-name:shFade}}
 @media (prefers-reduced-motion:reduce){.toast{transition:none}.overlay,.overlay>.sheet,.overlay.closing,.overlay.closing>.sheet,.overlay.ask>.dialog{animation:none}}
 </style>
@@ -983,7 +983,7 @@ function closeSheet(){
   /* 少し下がりながら消してから取り除く（その間に別の画面が開いたら、そちらはそのまま） */
   [...g('layer').children].forEach(x=>x.classList.add('closing'));
   const kids=[...g('layer').children];
-  setTimeout(()=>kids.forEach(x=>x.remove()),170);
+  setTimeout(()=>kids.forEach(x=>x.remove()),280);
 }
 function g(id){return document.getElementById(id)}
 const priorLabel=()=>L('このアプリを使う前に受け取った分（売上の集計に入れない）','Received before I started using this app (don’t count in income)');
