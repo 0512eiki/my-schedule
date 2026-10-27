@@ -2,7 +2,7 @@
 // ・範囲は /my-schedule/journal/ だけ（My schedule の sw.js とは別。My schedule の画面・通知には触らない）
 // ・画面のファイルは「まずネット → だめなら端末の控え」（直した分がすぐ届くように）。Supabase の部品（版の決まった CDN）は控えを先に使う
 // ・Supabase とのやりとり（データ）はここでは扱わない（cloud.js と outbox.js が受け持つ）
-const VERSION = 'jr-7248efa213';
+const VERSION = 'jr-18f7c528d6';
 const CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.min.js';
 const FILES = ['./', 'index.html', 'cloud.js', 'rules.mjs', 'search.mjs', 'review-parse.mjs', 'reader.js', 'voice.js', 'search-ui.js', 'outbox.js',
   'review.js', 'practice.js', 'reflect.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png'];

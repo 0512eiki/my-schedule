@@ -226,13 +226,10 @@ body:not([data-view=ink]) .v-ink,body:not([data-view=menu]) .v-menu,body:not([da
 .mn-sub{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--faint);margin:8px 2px 2px}
 .mn-st{margin-left:auto;white-space:nowrap} .mn-st.ok{color:var(--good)} .mn-st.wait{color:var(--warn)}
 .mn-title:focus,.mn-at input:focus,.mi input:focus,.tp-name input:focus{border-color:var(--acc)}
-.mi{display:grid;grid-template-columns:46px 1fr 86px auto;grid-template-areas:"t nm mins ops" ". note note ops";gap:6px 8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.mi{display:grid;grid-template-columns:1fr auto;grid-template-areas:"nm ops" "note ops";gap:6px 8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .mi:first-child{border-top:0}
-.mi .t{grid-area:t;font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
 .mi input{height:40px;border-radius:10px;border:1px solid var(--line2);background:rgba(255,255,255,.8);padding:0 10px;font-size:15px;min-width:0;width:100%;outline:none}
 .mi .nm{grid-area:nm}
-.mi .mins{grid-area:mins;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)}
-.mi .mins input{text-align:right;padding:0 6px}
 .mi .note{grid-area:note;height:34px;font-size:13px;color:var(--dim);background:rgba(255,255,255,.55)}
 .mi .ops{grid-area:ops;display:flex;gap:4px;align-self:start}
 .mn-empty{font-size:13px;color:var(--faint);padding:6px 2px}
@@ -298,7 +295,7 @@ body:not([data-view=ink]) .v-ink,body:not([data-view=menu]) .v-menu,body:not([da
   .voice{bottom:calc(82px + env(safe-area-inset-bottom))}
   .toast{bottom:calc(86px + env(safe-area-inset-bottom))}
   .undo-bar{bottom:calc(86px + env(safe-area-inset-bottom))}
-  .mi{grid-template-columns:34px 1fr 100px;grid-template-areas:"t nm mins" "note note ops";gap:6px}
+  .mi{grid-template-columns:1fr auto;grid-template-areas:"nm nm" "note ops";gap:6px}
   .mi .ops{align-self:center;justify-content:flex-end}
   .seg button{font-size:13px}
   .mn-title{flex-basis:100%}

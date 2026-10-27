@@ -36,10 +36,11 @@ export function cleanReview(id, b, cur) {
     createdAt: (cur && cur.createdAt) || Date.now(), updatedAt: Date.now(),
   };
 }
-// メニューの項目 [{name, minutes, note}]（並び順のまま）。minutes は空（null）でもよい（10/27：空の項目より後は時刻を出さない）
+// メニューの項目 [{name, note}]（並び順のまま）。10/27 追加③：時間は書かない（本人の決まり）
+// 前のデータの minutes は消さずにそのまま持つ（ある時だけ。新しく作る項目には入れない）
 const mins = (v) => (v === null || v === '' ? null : Math.max(0, Math.min(600, Math.round(Number(v) || 0))));
 export const cleanItems = (a) => (Array.isArray(a) ? a : []).slice(0, 60).map((it) => ({
-  name: clip(it && it.name, 120), minutes: mins(it && it.minutes), note: clip(it && it.note, 500) }));
+  name: clip(it && it.name, 120), ...(it && it.minutes !== undefined ? { minutes: mins(it.minutes) } : {}), note: clip(it && it.note, 500) }));
 export const FROM_KINDS = ['', 'template', 'notion', 'page', 'calendar'];
 export function cleanMenu(id, b, cur) {
   const hm = (v) => (/^\d{2}:\d{2}$/.test(v || '') ? v : null);
@@ -90,11 +91,10 @@ export function calendarRows(events, { days = 14, now = Date.now(), tz, isPracti
   return [...out.values()].sort((x, y) => (x.date + x.start_time).localeCompare(y.date + y.start_time));
 }
 
-/* ---------- 手書き（読み取った文字）→ メニューの項目（10/27 追加②） ----------
-   1行 = 1項目。行の頭の・－数字などは取る。「15分」「15min」「15'」は minutes に。空の行・見出しっぽい行は飛ばす */
+/* ---------- 手書き（読み取った文字）→ メニューの項目（10/27 追加②・③） ----------
+   1行 = 1項目（名前だけ）。行の頭の・－数字などは取る。「15分」なども名前にそのまま残す（時間は取り出さない）。空の行・見出しっぽい行は飛ばす */
 const HEAD_RE = /^(?:(?:今日|本日|きょう)の)?(?:練習|稽古)?(?:メニュー|menu|内容|予定|練習|稽古)(?:\s*[(（].*[)）])?$/i;
 const DATE_RE = /^(?:\d{4}[\/.年-])?\d{1,2}[\/.月-]\d{1,2}日?\s*(?:[(（]?[日月火水木金土][曜]?[日]?[)）]?)?$/;
-const MIN_RE = /(\d{1,3})\s*(?:分間?|min(?:utes?|s)?\.?|['’′])(?![a-z])/i;
 export function menuFromLines(text) {
   const out = [];
   for (const raw of String(text || '').replace(/\r\n?/g, '\n').split('\n')) {
@@ -106,12 +106,10 @@ export function menuFromLines(text) {
     if (!l || /^[\p{P}\p{S}\s]+$/u.test(l)) continue;
     const bare = l.replace(/[:：]$/, '').trim();
     if (HEAD_RE.test(bare) || DATE_RE.test(bare)) continue;
-    const mm = l.match(MIN_RE);
-    let name = mm ? (l.slice(0, mm.index) + ' ' + l.slice(mm.index + mm[0].length)) : l;
-    name = name.replace(/\s+/g, ' ').replace(/[(（]\s*[)）]/g, '').replace(/^[\s:：・\-、,]+|[\s:：・\-、,（(]+$/g, '').trim();
+    let name = l.replace(/\s+/g, ' ').replace(/[(（]\s*[)）]/g, '').replace(/^[\s:：・\-、,]+|[\s:：・\-、,（(]+$/g, '').trim();
     if (!name) continue;
     name = name.replace(/\(/g, '（').replace(/\)/g, '）');                       // かっこは日本語の形に戻す（NFKC で半角になるため）
-    out.push({ name: name.slice(0, 120), minutes: mm ? Math.min(600, +mm[1]) : null, note: '' });
+    out.push({ name: name.slice(0, 120), note: '' });
     if (out.length >= 60) break;
   }
   return out;

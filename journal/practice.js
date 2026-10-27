@@ -9,6 +9,8 @@
    ・10/27 追加②：予定（カレンダー）から本部が先に作ったメニュー（from_kind='calendar'）は「📅 予定から 20:00〜23:00」と出すだけ
      （「時刻を直す」で今まで通りの入力欄。時刻か題を直すと from_kind='' になり、もう予定には合わせない）
    ・10/27 追加②：「✍️ 手書きからメニューにする」…その日の手書きを読み取った文字を、1行＝1項目にして後ろに一度で足す（「戻す」あり）
+   ・10/27 追加③（本人「それぞれのメニューに対する時間は必要ない。記録したいのはメニュー」）：項目は名前とメモだけ。分の欄・各項目の時刻・合計の分は出さない
+     （前のデータの minutes は消さずにそのまま持つ。新しく作る項目には入れない）
    使っている部品（index.html 側）：$, state, openDate, today, parseD, WD, hhmm, escapeHtml, toast, closeSide, renderList, layout, Outbox, pageRead
    ========================================================= */
 import { menuFromLines, isCalId } from './rules.mjs';
@@ -90,51 +92,35 @@ function setSt(kind, id, msg, cls) {
 Outbox.on((it) => { if (it.op === 'put' && !timers.has(it.kind + '/' + it.id)) afterSave(it.kind, it.id); });
 
 /* =========================================================
-   メニューの項目（メニューと型で同じ部品）
+   メニューの項目（メニューと型で同じ部品）。名前とメモだけ（時間は書かない）
    ========================================================= */
-// 開始時刻から各項目の時刻。分が空の項目より後は出さない（何分かかるか分からないので）
-const noMin = (it) => it.minutes == null || it.minutes === '';
-function times(items, start) {
-  if (!start) return items.map(() => '');
-  let [h, m] = start.split(':').map(Number), t = h * 60 + m, known = true;
-  return items.map((it) => {
-    if (!known) return '';
-    const s = `${String(Math.floor(t / 60) % 24).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
-    if (noMin(it)) known = false; else t += it.minutes;
-    return s;
-  });
-}
-function itemsHTML(items, start) {
+function itemsHTML(items) {
   if (!items.length) return '<div class="mn-empty">まだ項目がありません。「＋ 足す」で入れます</div>';
-  const ts = times(items, start);
   return items.map((it, i) => `<div class="mi" data-i="${i}">
-    <span class="t">${ts[i]}</span>
     <input class="nm" data-f="name" value="${esc(it.name)}" placeholder="例：打ち込み（背負い）" maxlength="120">
-    <label class="mins"><input data-f="minutes" type="number" inputmode="numeric" min="0" max="600" value="${noMin(it) ? '' : it.minutes}" placeholder="–">分</label>
     <input class="note" data-f="note" value="${esc(it.note)}" placeholder="メモ（なくてもOK）" maxlength="500">
     <span class="ops"><button class="ib sm" data-act="up" title="上へ" ${i === 0 ? 'disabled' : ''}>↑</button><button class="ib sm" data-act="down" title="下へ" ${i === items.length - 1 ? 'disabled' : ''}>↓</button><button class="ib sm" data-act="rm" title="この項目を消す">✕</button></span>
   </div>`).join('');
 }
-const total = (items) => items.reduce((a, it) => a + (it.minutes || 0), 0);
+const count = (items) => `${items.length}つ`;
 // 項目の入力 → 中身を直す（並びは変えないので、描き直さない）
 function itemInput(items, t) {
   const row = t.closest('.mi'); if (!row || !t.dataset.f) return false;
   const it = items[+row.dataset.i]; if (!it) return false;
-  it[t.dataset.f] = t.dataset.f !== 'minutes' ? t.value : t.value.trim() === '' ? null : Math.max(0, Math.min(600, Math.round(Number(t.value) || 0)));
+  if (t.dataset.f !== 'name' && t.dataset.f !== 'note') return false;
+  it[t.dataset.f] = t.value;
   return true;
 }
 // 足す・消す・並べかえ → true なら描き直す
 function itemAct(items, act, i) {
-  if (act === 'add-item') { items.push({ name: '', minutes: 10, note: '' }); return true; }
+  if (act === 'add-item') { items.push({ name: '', note: '' }); return true; }
   if (act === 'up' && i > 0) { [items[i - 1], items[i]] = [items[i], items[i - 1]]; return true; }
   if (act === 'down' && i < items.length - 1) { [items[i + 1], items[i]] = [items[i], items[i + 1]]; return true; }
   if (act === 'rm') { items.splice(i, 1); return true; }
   return false;
 }
-function refreshTimes(box, items, start) {
-  const ts = times(items, start);
-  box.querySelectorAll('.mi').forEach((r, i) => { const t = r.querySelector('.t'); if (t) t.textContent = ts[i] || ''; });
-  const sub = box.querySelector('.mn-count'); if (sub) sub.textContent = `${items.length}つ・${total(items)}分`;
+function refreshCount(box, items) {
+  const sub = box.querySelector('.mn-count'); if (sub) sub.textContent = count(items);
 }
 // 消すボタンは2回押し（1回目で「本当に消す」に変わる）
 function sure(b, label) {
@@ -173,8 +159,8 @@ function renderMenus() {
         <input class="mn-title" data-k="title" value="${esc(m.title)}" placeholder="練習の名前（例：練習・小学生クラス）" maxlength="120">
         ${atHTML(m)}
       </div>
-      <div class="mn-sub"><span class="mn-count">${m.items.length}つ・${total(m.items)}分</span>${fromLabel(m)}<span class="mn-st"></span></div>
-      <div class="mn-items">${itemsHTML(m.items, m.start_time)}</div>
+      <div class="mn-sub"><span class="mn-count">${count(m.items)}</span>${fromLabel(m)}<span class="mn-st"></span></div>
+      <div class="mn-items">${itemsHTML(m.items)}</div>
       ${m.items.length ? '' : tplChips('fill')}
       <div class="row"><button class="btn sub" data-act="add-item">＋ 足す</button><button class="btn sub" data-act="from-ink">✍️ 手書きからメニューにする</button><button class="btn sub" data-act="to-tpl">📋 型として保存</button><button class="lnk del" data-act="del-menu">このメニューを消す</button></div>
     </section>`).join('');
@@ -197,7 +183,7 @@ function tplChips(mode) {
 function newMenu(d, { items, from_kind = '', from_id = '', title } = {}) {
   const now = isoNow();
   return { id: newId(d), date: d, title: title || (Day.menus.length ? '練習（2回目）' : '練習'), start_time: null, end_time: null,
-    items: items ? clone(items) : [{ name: '', minutes: 10, note: '' }], from_kind, from_id, created_at: now, updated_at: now };
+    items: items ? clone(items) : [{ name: '', note: '' }], from_kind, from_id, created_at: now, updated_at: now };
 }
 function addMenu(m) {
   if (m.date === Day.date) { Day.menus.push(m); document.activeElement?.blur?.(); renderMenus(); }
@@ -213,7 +199,7 @@ vMenu.addEventListener('input', (e) => {
     if (m.from_kind === 'calendar') { m.from_kind = ''; fixing.delete(m.id); }
   }
   else if (!itemInput(m.items, t)) return;
-  refreshTimes(t.closest('[data-menu]'), m.items, m.start_time);
+  refreshCount(t.closest('[data-menu]'), m.items);
   saveLater('menus', m);
 });
 vMenu.addEventListener('click', (e) => {
@@ -314,8 +300,8 @@ function openTemplate(t) {
     <div class="rv-head"><b>📋 練習メニューの型</b><span class="rv-save"></span><button class="ib" data-act="close" title="閉じる">✕</button></div>
     <div class="rv-body">
       <label class="tp-name">型の名前<input data-k="name" value="${esc(t.name)}" placeholder="例：いつもの火曜" maxlength="60"></label>
-      <div class="mn-sub"><span class="mn-count">${t.items.length}つ・${total(t.items)}分</span><span>メニューを作る時に「型から」1回押すだけで入ります</span></div>
-      <div class="mn-items">${itemsHTML(t.items, null)}</div>
+      <div class="mn-sub"><span class="mn-count">${count(t.items)}</span><span>メニューを作る時に「型から」1回押すだけで入ります</span></div>
+      <div class="mn-items">${itemsHTML(t.items)}</div>
       <div class="row"><button class="btn sub" data-act="add-item">＋ 足す</button></div>
       <div class="row"><button class="lnk del" data-act="del-tpl">この型を消す</button></div>
     </div>
@@ -337,7 +323,7 @@ tov.addEventListener('input', (e) => {
   const t = TP.row, el = e.target;
   if (el.dataset.k === 'name') t.name = el.value;
   else if (!itemInput(t.items, el)) return;
-  refreshTimes(tov, t.items, null);
+  refreshCount(tov, t.items);
   saveLater('templates', t);
   if (el.dataset.k === 'name') renderTplList();
 });
@@ -361,7 +347,7 @@ tov.addEventListener('click', (e) => {
 $('tplList').addEventListener('click', (e) => { const b = e.target.closest('[data-tpl]'); if (!b) return; closeSide(); const t = Day.templates.find((x) => x.id === b.dataset.tpl); if (t) openTemplate(t); });
 $('tplNew').addEventListener('click', () => {
   closeSide();
-  const now = isoNow(), t = { id: tplId(), name: '新しい型', items: [{ name: '', minutes: 10, note: '' }], sort: Day.templates.length, created_at: now, updated_at: now };
+  const now = isoNow(), t = { id: tplId(), name: '新しい型', items: [{ name: '', note: '' }], sort: Day.templates.length, created_at: now, updated_at: now };
   Day.templates.push(t); renderTplList(); saveLater('templates', t, 0); openTemplate(t);
   setTimeout(() => { const i = tov.querySelector('[data-k=name]'); if (i) { i.focus(); i.select(); } }, 30);
 });
@@ -392,12 +378,10 @@ async function openArchive(id) {
     </div></div>
     <div class="rv-foot">${a.menu ? '<button class="btn" data-act="arc-use">📋 このメニューを今日に使う</button>' : '<span></span>'}<button class="btn sub" data-act="close">閉じる</button></div></div>`;
 }
-// 昔のメニューの文 → 項目（1行 = 1つ。「15分」があれば時間に）
+// 昔のメニューの文 → 項目（1行 = 1つ。名前だけ。「15分」なども名前にそのまま残す）
 function menuFromText(text) {
-  return String(text || '').split('\n').map((l) => l.replace(/^\s*(?:[-*・●○◦]|\d{1,2}[.)．、])\s*/, '').trim()).filter(Boolean).slice(0, 60).map((l) => {
-    const mm = l.match(/(\d{1,3})\s*分/);
-    return { name: (mm ? l.replace(mm[0], '') : l).replace(/[\s　・:：（(）)]+$/, '').trim().slice(0, 120) || l.slice(0, 120), minutes: mm ? Math.min(600, +mm[1]) : 0, note: '' };
-  });
+  return String(text || '').split('\n').map((l) => l.replace(/^\s*(?:[-*・●○◦]|\d{1,2}[.)．、])\s*/, '').trim()).filter(Boolean).slice(0, 60)
+    .map((l) => ({ name: l.slice(0, 120), note: '' }));
 }
 async function arcAct(act) {
   if (act !== 'arc-use') return;
