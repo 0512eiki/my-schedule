@@ -168,7 +168,7 @@ body.jr-locked{overflow:hidden}
     catch (e) { if (e instanceof Bad) throw e; const v = await idb.get(key); if (v !== undefined) return v; throw e; }
   }
   const pageOf = (r) => ({ date: r.date, title: r.title || '', bg: r.bg || 'lined', ink: Array.isArray(r.ink) ? r.ink : [], text: r.text || '', read: r.read || null, createdAt: ms(r.created_at), updatedAt: ms(r.updated_at) });
-  const menuOf = (r) => ({ id: r.id, date: r.date, title: r.title, start_time: hm(r.start_time), items: r.items || [], from_kind: r.from_kind || '', from_id: r.from_id || '', created_at: r.created_at, updated_at: r.updated_at });
+  const menuOf = (r) => ({ id: r.id, date: r.date, title: r.title, start_time: hm(r.start_time), end_time: hm(r.end_time), items: r.items || [], from_kind: r.from_kind || '', from_id: r.from_id || '', created_at: r.created_at, updated_at: r.updated_at });
   const tplOf = (r) => ({ id: r.id, name: r.name, items: r.items || [], sort: r.sort || 0, created_at: r.created_at, updated_at: r.updated_at });
   const reflOf = (r) => ({ id: r.id, date: r.date, menu_id: r.menu_id, about: r.about, said: r.said || '', audio: r.audio || '', points: r.points || [], status: r.status, name_warn: !!r.name_warn, created_at: r.created_at, updated_at: r.updated_at });
   const pendingBodies = (kind) => { try { return Object.values(JSON.parse(localStorage.getItem('jr:outbox') || '{}')).filter((it) => it.kind === kind && it.op === 'put').map((it) => it.body); } catch { return []; } };
@@ -270,7 +270,12 @@ body.jr-locked{overflow:hidden}
       if (id && (kind === 'templates' ? R.isTid(id) : R.isRid(id))) {
         if (method === 'PUT') {
           let row;
-          if (kind === 'menus') { const c = R.cleanMenu(id, body, null); row = { id, date: c.date, title: c.title, start_time: c.start_time, items: c.items, from_kind: c.from_kind, from_id: c.from_id, created_at: c.created_at }; }
+          if (kind === 'menus') {
+            const c = R.cleanMenu(id, body, null);
+            row = { id, date: c.date, title: c.title, start_time: c.start_time, items: c.items, from_kind: c.from_kind, from_id: c.from_id, created_at: c.created_at };
+            // end_time は予定から入った行（本部が作る）だけにある。それ以外は送らない（journal.sql の追加②を流す前でも保存できるように）
+            if (c.end_time || R.isCalId(id)) row.end_time = c.end_time;
+          }
           else if (kind === 'templates') { const c = R.cleanTemplate(id, body, null); row = { id, name: c.name, items: c.items, sort: c.sort, created_at: c.created_at }; }
           else { const c = R.cleanReflection(id, body, null); row = { id, date: c.date, menu_id: c.menu_id, about: c.about, said: c.said, audio: c.audio, points: c.points, status: c.status, name_warn: c.name_warn, created_at: c.created_at }; }
           const r = (await q(sb.from(table).upsert({ owner: uid, ...row }, { onConflict: 'owner,id' }).select('updated_at')))[0];

@@ -216,6 +216,13 @@ body:not([data-view=ink]) .v-ink,body:not([data-view=menu]) .v-menu,body:not([da
 .mn-title{flex:1;min-width:150px;height:42px;border-radius:12px;border:1px solid var(--line2);background:rgba(255,255,255,.8);padding:0 12px;font-family:var(--mincho);font-weight:700;font-size:17px;outline:none}
 .mn-at{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);white-space:nowrap}
 .mn-at input{height:42px;border-radius:12px;border:1px solid var(--line2);background:rgba(255,255,255,.8);padding:0 8px;font-size:15px;outline:none;width:140px}
+.mn-at.cal{gap:4px;flex-wrap:wrap}
+.mn-cal{display:inline-flex;align-items:center;height:42px;padding:0 12px;border-radius:12px;background:rgba(53,82,212,.09);color:var(--acc);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.mn-at.cal .lnk{font-size:12px;color:var(--faint);text-decoration:underline}
+.undo-bar{position:fixed;z-index:60;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100vw - 24px);box-sizing:border-box;background:rgba(20,24,40,.9);color:#fff;padding:10px 12px 10px 16px;border-radius:14px;font-size:14px;box-shadow:var(--shadow)}
+.undo-bar[hidden]{display:none}
+.undo-bar .lnk{color:#9fb4ff;font-size:14px;font-weight:700;padding:6px 10px;border-radius:10px;background:rgba(255,255,255,.1);white-space:nowrap}
+.undo-bar .lnk[hidden]{display:none}
 .mn-sub{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--faint);margin:8px 2px 2px}
 .mn-st{margin-left:auto;white-space:nowrap} .mn-st.ok{color:var(--good)} .mn-st.wait{color:var(--warn)}
 .mn-title:focus,.mn-at input:focus,.mi input:focus,.tp-name input:focus{border-color:var(--acc)}
@@ -290,6 +297,7 @@ body:not([data-view=ink]) .v-ink,body:not([data-view=menu]) .v-menu,body:not([da
   .side.only-search #searchRes:not([hidden]) ~ .sr-tip{display:none}
   .voice{bottom:calc(82px + env(safe-area-inset-bottom))}
   .toast{bottom:calc(86px + env(safe-area-inset-bottom))}
+  .undo-bar{bottom:calc(86px + env(safe-area-inset-bottom))}
   .mi{grid-template-columns:34px 1fr 100px;grid-template-areas:"t nm mins" "note note ops";gap:6px}
   .mi .ops{align-self:center;justify-content:flex-end}
   .seg button{font-size:13px}

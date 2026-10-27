@@ -36,14 +36,85 @@ export function cleanReview(id, b, cur) {
     createdAt: (cur && cur.createdAt) || Date.now(), updatedAt: Date.now(),
   };
 }
-// メニューの項目 [{name, minutes, note}]（並び順のまま）
+// メニューの項目 [{name, minutes, note}]（並び順のまま）。minutes は空（null）でもよい（10/27：空の項目より後は時刻を出さない）
+const mins = (v) => (v === null || v === '' ? null : Math.max(0, Math.min(600, Math.round(Number(v) || 0))));
 export const cleanItems = (a) => (Array.isArray(a) ? a : []).slice(0, 60).map((it) => ({
-  name: clip(it && it.name, 120), minutes: Math.max(0, Math.min(600, Math.round(Number(it && it.minutes) || 0))), note: clip(it && it.note, 500) }));
+  name: clip(it && it.name, 120), minutes: mins(it && it.minutes), note: clip(it && it.note, 500) }));
+export const FROM_KINDS = ['', 'template', 'notion', 'page', 'calendar'];
 export function cleanMenu(id, b, cur) {
+  const hm = (v) => (/^\d{2}:\d{2}$/.test(v || '') ? v : null);
   return { id, date: isDate(b.date) ? b.date : id.slice(0, 10), title: clip(b.title, 120),
-    start_time: /^\d{2}:\d{2}$/.test(b.start_time || '') ? b.start_time : null, items: cleanItems(b.items),
-    from_kind: ['', 'template', 'notion', 'page'].includes(b.from_kind) ? b.from_kind : '', from_id: clip(b.from_id, 80),
+    start_time: hm(b.start_time), end_time: hm(b.end_time), items: cleanItems(b.items),
+    from_kind: FROM_KINDS.includes(b.from_kind) ? b.from_kind : '', from_id: clip(b.from_id, 80),
     created_at: (cur && cur.created_at) || isoOr(b.created_at, isoNow()), updated_at: isoNow() };
+}
+
+/* ---------- 予定（Google カレンダー）から先に作るメニュー（10/27 追加②） ----------
+   本部の bridge（calendarMenus → SQL）と、試作の server.mjs（honbu/data/calendar.json）の両方で使う */
+// 本部の calendar.mjs の NOT_PRACTICE と routines.mjs の JUDO と同じ（本部の作業タイムなどは練習ではない）
+export const NOT_PRACTICE = /^(🏯|☕|🍙|📝)|柔道ノート|柔道日誌|judo ?note/i;
+export const PRACTICE_RE = /judo|柔道|練習|クラス|class|lesson|レッスン|乱取/i;
+export const isPracticeTitle = (t = '') => PRACTICE_RE.test(String(t)) && !NOT_PRACTICE.test(String(t).trim());
+// 短いハッシュ（英小文字と数字7文字。同じ文字なら必ず同じ）
+export function hash7(s) {
+  let h = 2166136261 >>> 0;
+  for (const c of String(s)) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  return h.toString(36).padStart(7, '0').slice(-7);
+}
+export const eventKey = (e) => String((e && e.id) || `${e && e.title}|${e && e.start}`);
+export const calendarMenuId = (date, e) => `${date}-c${hash7(eventKey(e))}`;
+export const isCalId = (id) => /^\d{4}-\d{2}-\d{2}-c[a-z0-9]{7}$/.test(String(id || ''));
+// その場所の時刻帯での「日付」と「時:分」（tz を渡さなければ、この機械の設定）
+export function localParts(ms, tz) {
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: tz || undefined, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const p = Object.fromEntries(f.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  return { date: `${p.year}-${p.month}-${p.day}`, hm: `${p.hour === '24' ? '00' : p.hour}:${p.minute}` };
+}
+/**
+ * カレンダーの予定 → 先に作っておくメニュー（items は空）
+ * events: [{id, title, start, end, allDay}]（本部の calendar().events）
+ * 今日（その場所の日付）から days 日後までに始まる、柔道の練習だけ。同じ予定は同じ id
+ */
+export function calendarRows(events, { days = 14, now = Date.now(), tz, isPractice = isPracticeTitle } = {}) {
+  const today = localParts(now, tz).date, until = now + days * 864e5, out = new Map();
+  for (const e of events || []) {
+    if (!e || e.allDay || !isPractice(e.title || '')) continue;
+    const s = Date.parse(e.start), en = Date.parse(e.end);
+    if (isNaN(s) || s >= until) continue;
+    const a = localParts(s, tz);
+    if (a.date < today) continue;
+    const id = calendarMenuId(a.date, e);
+    if (!out.has(id)) out.set(id, { id, date: a.date, title: clip(String(e.title || '').trim(), 120), start_time: a.hm,
+      end_time: isNaN(en) || en <= s ? null : localParts(en, tz).hm, items: [], from_kind: 'calendar', from_id: clip(eventKey(e), 80) });
+  }
+  return [...out.values()].sort((x, y) => (x.date + x.start_time).localeCompare(y.date + y.start_time));
+}
+
+/* ---------- 手書き（読み取った文字）→ メニューの項目（10/27 追加②） ----------
+   1行 = 1項目。行の頭の・－数字などは取る。「15分」「15min」「15'」は minutes に。空の行・見出しっぽい行は飛ばす */
+const HEAD_RE = /^(?:(?:今日|本日|きょう)の)?(?:練習|稽古)?(?:メニュー|menu|内容|予定|練習|稽古)(?:\s*[(（].*[)）])?$/i;
+const DATE_RE = /^(?:\d{4}[\/.年-])?\d{1,2}[\/.月-]\d{1,2}日?\s*(?:[(（]?[日月火水木金土][曜]?[日]?[)）]?)?$/;
+const MIN_RE = /(\d{1,3})\s*(?:分間?|min(?:utes?|s)?\.?|['’′])(?![a-z])/i;
+export function menuFromLines(text) {
+  const out = [];
+  for (const raw of String(text || '').replace(/\r\n?/g, '\n').split('\n')) {
+    let l = raw.trim().replace(/^[①-⑳⑴-⒇⒈-⒛❶-❿]\s*/, '');                 // 丸数字は先に（NFKC で「1」になるため）
+    l = l.normalize('NFKC').replace(/\s+/g, ' ').trim();
+    l = l.replace(/^\d{1,2}:\d{2}(?:\s*[~〜-]\s*\d{1,2}:\d{2})?\s*/, '');           // 行の頭の時刻（19:00 など）
+    l = l.replace(/^(?:[-−–—―ー~〜*•·∙‧・●○◦◯□■☐✓✔→▶>]+|\(?\d{1,2}[.)．、:：])\s*/, '').trim();
+    l = l.replace(/^(?:[-−–—―*•·∙‧・●○◦]+)\s*/, '').trim();
+    if (!l || /^[\p{P}\p{S}\s]+$/u.test(l)) continue;
+    const bare = l.replace(/[:：]$/, '').trim();
+    if (HEAD_RE.test(bare) || DATE_RE.test(bare)) continue;
+    const mm = l.match(MIN_RE);
+    let name = mm ? (l.slice(0, mm.index) + ' ' + l.slice(mm.index + mm[0].length)) : l;
+    name = name.replace(/\s+/g, ' ').replace(/[(（]\s*[)）]/g, '').replace(/^[\s:：・\-、,]+|[\s:：・\-、,（(]+$/g, '').trim();
+    if (!name) continue;
+    name = name.replace(/\(/g, '（').replace(/\)/g, '）');                       // かっこは日本語の形に戻す（NFKC で半角になるため）
+    out.push({ name: name.slice(0, 120), minutes: mm ? Math.min(600, +mm[1]) : null, note: '' });
+    if (out.length >= 60) break;
+  }
+  return out;
 }
 export function cleanTemplate(id, b, cur) {
   return { id, name: clip(b.name, 60).trim() || '名前のない型', items: cleanItems(b.items), sort: Math.round(Number(b.sort) || 0),
