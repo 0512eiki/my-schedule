@@ -1,8 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3552d4"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
-  <rect width="180" height="180" rx="40" fill="url(#g)"/>
-  <rect x="44" y="34" width="92" height="112" rx="10" fill="#fffdf8"/>
-  <path d="M60 64h60M60 84h60M60 104h40" stroke="#3552d4" stroke-opacity=".25" stroke-width="4" stroke-linecap="round"/>
-  <path d="M62 118c14-20 30-30 52-40" stroke="#16181f" stroke-width="6" stroke-linecap="round" fill="none"/>
-  <path d="M118 52l14 14-30 30-16 2 2-16z" fill="#16181f"/>
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- 柔道日誌のアイコン（10/27 本人が B「黒帯の帳面」を選んだ）：生成り色のノート＋黒帯＋朱のはんこ「誌」 -->
+  <rect width="100" height="100" fill="#f3ead7"/>
+  <rect x="22" y="14" width="56" height="72" rx="5" fill="#fffdf8" stroke="#d8ccb2" stroke-width="1.5"/>
+  <g stroke="#e3d8c1" stroke-width="1.4"><line x1="30" y1="26" x2="70" y2="26"/><line x1="30" y1="34" x2="70" y2="34"/><line x1="30" y1="66" x2="70" y2="66"/><line x1="30" y1="74" x2="62" y2="74"/></g>
+  <rect x="12" y="44" width="76" height="11" fill="#17171c"/>
+  <path d="M50 49 L38 66 L44 68 L51 55 Z" fill="#17171c"/><path d="M50 49 L62 66 L56 68 L49 55 Z" fill="#26262d"/>
+  <rect x="43" y="42" width="14" height="15" rx="2.5" fill="#26262d"/>
+  <rect x="64" y="70" width="14" height="14" rx="2" fill="#c8361f"/><text x="71" y="80.5" font-size="10" font-family="Hiragino Mincho ProN,Yu Mincho,serif" font-weight="700" fill="#fff" text-anchor="middle">誌</text>
 </svg>
