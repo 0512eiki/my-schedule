@@ -31,6 +31,11 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%}
+/* iPhone で画面が左右に動かないように（10/27 本人「画面の左右が動いてしまうのがうざい」）
+   ・横には動かさない（縦のスクロールと、ペンで書く所はそのまま）
+   ・文字の欄を押した時に iPhone が勝手に拡大しないよう、スマホでは字を 16px 以上に（拡大すると左右に動くようになる） */
+html,body{overflow-x:hidden;overscroll-behavior-x:none;max-width:100%}
+@media (max-width:820px){input,textarea,select{font-size:16px!important}.tp-name input,.mn-title{font-size:17px!important}}
 body{font-family:var(--sans);color:var(--text);background:var(--base);-webkit-text-size-adjust:100%}
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:
   radial-gradient(900px 620px at 6% -10%,var(--b1),transparent 58%),
@@ -338,7 +343,7 @@ body:not([data-view=ink]) .v-ink,body:not([data-view=menu]) .v-menu,body:not([da
       </div>
       <div class="ttl">
         <div class="d" id="dateLabel"></div>
-        <input id="title" placeholder="見出し（例：練習・個人レッスン・試合）" maxlength="60">
+        <input id="title" placeholder="見出し（例：練習・試合）" maxlength="60">
       </div>
       <div class="tools draw v-ink" id="tools">
         <button class="ib on" data-tool="pen" title="ペン">✒️</button>
