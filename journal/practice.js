@@ -11,9 +11,10 @@
    ・10/27 追加②：「✍️ 手書きからメニューにする」…その日の手書きを読み取った文字を、1行＝1項目にして後ろに一度で足す（「戻す」あり）
    ・10/27 追加③（本人「それぞれのメニューに対する時間は必要ない。記録したいのはメニュー」）：項目は名前とメモだけ。分の欄・各項目の時刻・合計の分は出さない
      （前のデータの minutes は消さずにそのまま持つ。新しく作る項目には入れない）
+   ・10/28 追加③：予定から入ったメニュー（from_kind='calendar'）の曜日・時刻が、本人の入れたクラスに合えば、題の横に小さくクラスの名前（records.js から jr:classes で受け取る）
    使っている部品（index.html 側）：$, state, openDate, today, parseD, WD, hhmm, escapeHtml, toast, closeSide, renderList, layout, Outbox, pageRead
    ========================================================= */
-import { menuFromLines, isCalId, arcParts, arcPhotos, arcPlain } from './rules.mjs';
+import { menuFromLines, isCalId, arcParts, arcPhotos, arcPlain, classFor } from './rules.mjs';
 const CLOUD = !!(window.JR && window.JR.cloud);
 const esc = (s) => escapeHtml(String(s ?? ''));
 const isoNow = () => new Date().toISOString();
@@ -179,7 +180,17 @@ function sure(b, label) {
    📋 メニュー（その日のページの中）
    ========================================================= */
 const vMenu = $('vMenu');
+let classes = [];
+addEventListener('jr:classes', (e) => {
+  const next = Array.isArray(e.detail) ? e.detail : [], key = (a) => JSON.stringify(a.map((c) => [c.id, c.name, c.days, c.start_time]));
+  if (key(next) === key(classes)) return;            // 変わっていなければ描き直さない（メモを打っている途中などに消えないように）
+  classes = next.map((c) => ({ ...c })); if (Day.view === 'menu') renderMenus();
+});
 function fromLabel(m) {
+  const c = classFor(m, classes);
+  return (c ? `<span class="chip cls" title="クラス（予定の曜日・時刻から）">${esc(c.name)}</span>` : '') + fromLabel0(m);
+}
+function fromLabel0(m) {
   if (m.from_kind === 'template') { const t = Day.templates.find((x) => x.id === m.from_id); return `<span class="chip">型「${esc(t ? t.name : '…')}」から</span>`; }
   if (m.from_kind === 'notion') return '<span class="chip">昔の記録（Notion）から</span>';
   if (m.from_kind === 'page') return '<span class="chip">✍️ 手書きから</span>';
@@ -197,6 +208,7 @@ function renderMenus() {
   const d = Day.date; if (!d) return;
   const ae = document.activeElement;
   if (ae && vMenu.contains(ae) && ae.matches('input, textarea')) return;   // 打っている途中は描き直さない（文字が消えないように）
+  if (!nov.hidden) return;                 // メモの大きな入力画面を開いている間も描き直さない
   const co = carry.items.length ? `<div class="todo" id="carry"><b>🔁 前回の振り返りから（${dlabel(carry.from_date)}）</b>
       <ul>${carry.items.map((t) => `<li>${esc(t)}</li>`).join('')}</ul><small>「次へ」の印をつけた所だけ。メニューは自分で決めます（勝手には変えません）</small></div>` : '';
   const cards = Day.menus.map((m) => `<section class="card glass mn" data-menu="${m.id}">
@@ -488,7 +500,7 @@ $('tabbar').addEventListener('click', async (e) => {
   side.classList.toggle('only-search', t === 'search');
   side.classList.add('open'); $('scrim').classList.add('show');
   if (t === 'search') setTimeout(() => $('q').focus(), 60);
-  if (t === 'rec') renderArcList();   // 昔の記録は開くたびに読み直す（アプリを開いたあとで入った分も出す）
+  if (t === 'rec') { renderArcList(); window.JournalRecords?.refresh(); }   // 昔の記録・カレンダーは開くたびに読み直す（アプリを開いたあとで入った分も出す）
 });
 
 /* ---------- 起動 ---------- */

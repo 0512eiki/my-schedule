@@ -157,3 +157,94 @@ export function carryOver(all, d) {
     .sort((a, b) => b.date.localeCompare(a.date) || String(b.updated_at).localeCompare(String(a.updated_at)))[0];
   return last ? { from_date: last.date, items: last.points.filter((p) => p.next && p.text.trim()).map((p) => p.text) } : { from_date: null, items: [] };
 }
+
+/* =========================================================
+   10/28 追加③：記録のカレンダー・今月の重点・クラス・今週のお便り
+   見本：honbu/public/mockups/journal-records-calendar.html（本人 OK 済み）
+   形と項目名は ../supabase/journal.sql の「2026-10-28 追加③」（jr_classes / jr_focus / jr_letters）と同じ
+   ========================================================= */
+export const isCid = (s) => /^[a-z0-9-]{4,40}$/.test(String(s || ''));          // クラスの id（型と同じ決まり。例 k-mh2x1a-ab12cd）
+export const isMonth = (s) => isDate(s) && String(s).slice(8) === '01';           // その月の1日
+export const monthOf = (d) => String(d).slice(0, 8) + '01';
+const pd = (n) => String(n).padStart(2, '0');
+const ymdOf = (dt) => `${dt.getUTCFullYear()}-${pd(dt.getUTCMonth() + 1)}-${pd(dt.getUTCDate())}`;
+const utc = (d) => { const [y, m, dd] = String(d).split('-').map(Number); return new Date(Date.UTC(y, m - 1, dd)); };
+export const addDaysTo = (d, n) => { const t = utc(d); t.setUTCDate(t.getUTCDate() + n); return ymdOf(t); };
+export const isoDay = (d) => { const w = utc(d).getUTCDay(); return w === 0 ? 7 : w; };          // 1=月 … 7=日（jr_classes.days と同じ）
+export const mondayOf = (d) => addDaysTo(d, 1 - isoDay(d));
+export const isMonday = (d) => isDate(d) && isoDay(d) === 1 && ymdOf(utc(d)) === d;
+export const DAY_NAMES = ['', '月', '火', '水', '木', '金', '土', '日'];
+// [1,3,5] → 「月水金」（並びは月→日）
+export const daysLabel = (days) => [...new Set((days || []).map(Number).filter((n) => n >= 1 && n <= 7))].sort((a, b) => a - b).map((n) => DAY_NAMES[n]).join('');
+// 来週の月曜〜日曜の見出し「10/26〜11/1」
+export const weekLabel = (week) => { const a = utc(week), b = utc(addDaysTo(week, 6)); return `${a.getUTCMonth() + 1}/${a.getUTCDate()}〜${b.getUTCMonth() + 1}/${b.getUTCDate()}`; };
+
+// クラス（本人が入れる：名前・曜日・始まり・終わり）
+export function cleanClass(id, b, cur) {
+  const hm = (v) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(v || '') ? v : null);
+  const days = [...new Set((Array.isArray(b.days) ? b.days : []).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 7))].sort((x, y) => x - y);
+  const name = clip(b.name, 40).trim() || [daysLabel(days), hm(b.start_time)].filter(Boolean).join(' ') || 'クラス';
+  return { id, name, days, start_time: hm(b.start_time), end_time: hm(b.end_time), sort: Math.round(Number(b.sort) || 0), is_default: !!b.is_default,
+    created_at: (cur && cur.created_at) || isoOr(b.created_at, isoNow()), updated_at: isoNow() };
+}
+// 今月の重点（1クラス × 1か月 = 1つ）。id は「月の1日-クラスの id」（例 2026-10-01-k-mh2x1a-ab12cd）
+export const focusId = (month, classId) => `${month}-${classId}`;
+export function parseFocusId(id) {
+  const s = String(id || ''), month = s.slice(0, 10), cls = s.slice(11);
+  return isMonth(month) && s[10] === '-' && isCid(cls) ? { month, class_id: cls } : null;
+}
+export function cleanFocus(b) {
+  return { month: b.month, class_id: b.class_id, text: clip(b.text, 300), updated_at: isoNow() };
+}
+// 今週のお便り（本部が作る。アプリは見るだけ）。body = {counts:{practice,reflections,ink,reviews}, did:[], good:[], focus:[], next:[]}
+export function cleanLetter(l) {
+  const b = (l && l.body) || {}, c = b.counts || {};
+  const list = (a) => (Array.isArray(a) ? a : []).map((x) => clip(typeof x === 'string' ? x : x && x.text, 300).trim()).filter(Boolean).slice(0, 12);
+  const n = (v) => Math.max(0, Math.min(99, Math.round(Number(v) || 0)));
+  return { week: l && l.week, title: clip(l && l.title, 80).trim() || '今週もおつかれさまでした',
+    body: { counts: { practice: n(c.practice), reflections: n(c.reflections), ink: n(c.ink), reviews: n(c.reviews) }, did: list(b.did), good: list(b.good), focus: list(b.focus), next: list(b.next) },
+    made_at: (l && l.made_at) || null };
+}
+
+// 予定から入ったメニュー（from_kind='calendar'）→ どのクラスか（曜日が合い、始まりの時刻が30分以内。時刻のないクラスは、その曜日にほかの候補がない時だけ）
+export function classFor(menu, classes) {
+  if (!menu || menu.from_kind !== 'calendar' || !isDate(menu.date) || !Array.isArray(classes)) return null;
+  const wd = isoDay(menu.date), min = (t) => (/^\d{2}:\d{2}/.test(t || '') ? +t.slice(0, 2) * 60 + +t.slice(3, 5) : null);
+  const at = min(menu.start_time);
+  const cands = classes.filter((c) => (c.days || []).includes(wd));
+  let best = null, bestD = Infinity;
+  for (const c of cands) {
+    const s = min(c.start_time);
+    if (s == null || at == null) continue;
+    const d = Math.abs(s - at);
+    if (d <= 30 && d < bestD) { best = c; bestD = d; }
+  }
+  if (best) return best;
+  const loose = cands.filter((c) => min(c.start_time) == null);
+  return loose.length === 1 && cands.length === 1 ? loose[0] : null;
+}
+
+// 振り返りの1行目（まとめがあればその最初の文、なければ話した言葉の最初の行）
+export const reflFirst = (r) => {
+  const p = (r && Array.isArray(r.points) ? r.points : []).map((x) => String((x && x.text) || '').trim()).find(Boolean);
+  return clip(p || String((r && r.said) || '').trim().split(/\n|。/)[0] || '', 80).trim();
+};
+/**
+ * 記録のカレンダー用：その間の1日ごとのまとめ（Mac の server.mjs と公開版の cloud.js で同じ）
+ * pages: [{date, ink(数か true), text}]  menus: jr_menus の形  reflections: jr_reflections の形  reviews: [{id, date, event, match}]
+ * → [{date, menus:[{id,title,start_time,end_time,from_kind,n,names}], refl:[{id,about,first}], ink, text, reviews:[{id,event}]}]（何かある日だけ・日付順）
+ */
+export function daySummary({ pages = [], menus = [], reflections = [], reviews = [] }, from, to) {
+  const out = new Map(), inR = (d) => isDate(d) && d >= from && d <= to;
+  const day = (d) => { if (!out.has(d)) out.set(d, { date: d, menus: [], refl: [], ink: false, text: false, reviews: [] }); return out.get(d); };
+  for (const p of pages) if (inR(p.date) && (p.ink || p.text)) { const x = day(p.date); x.ink = x.ink || !!p.ink; x.text = x.text || !!String(p.text || '').trim(); }
+  for (const m of [...menus].sort(byTime)) if (inR(m.date)) {
+    const items = Array.isArray(m.items) ? m.items : [];
+    const names = items.map((i) => String((i && i.name) || '').trim()).filter(Boolean);
+    day(m.date).menus.push({ id: m.id, title: m.title || '', start_time: m.start_time ? String(m.start_time).slice(0, 5) : null, end_time: m.end_time ? String(m.end_time).slice(0, 5) : null,
+      from_kind: m.from_kind || '', n: names.length, names: names.slice(0, 6).map((s) => s.slice(0, 30)) });
+  }
+  for (const r of reflections) if (inR(r.date)) { const f = reflFirst(r); if (f) day(r.date).refl.push({ id: r.id, about: r.about === 'self' ? 'self' : 'class', first: f }); }
+  for (const v of reviews) if (inR(v.date)) day(v.date).reviews.push({ id: v.id, event: clip(v.event, 60) });
+  return [...out.values()].sort((a, b) => a.date.localeCompare(b.date));
+}

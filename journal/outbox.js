@@ -7,13 +7,14 @@
    ・読みこめない時は、前に読みこんだ分＋まだ送っていない分を見せる
    ・文字のメモの「書き足し」（op = append）もためる。同じ日に何回でも足せる（足した順に送る）
    ・試合の反省（reviews）も、まず端末に入れてから送る
+   ・10/28 追加③：クラス（classes）・今月の重点（focus）も同じ（お便りは見るだけなので、ここには入らない）
    ・送り先は JR.fetch（試作 = この Mac のサーバー、公開版 = cloud.js が Supabase に送る）
    使っている部品（index.html 側）：state（手書きの保存がうまくいっていないか）, hhmm
    ========================================================= */
 'use strict';
 const Outbox = (() => {
   const KEY = 'jr:outbox', CACHE = 'jr:cache:';
-  const PATH = { menus: 'api/menus/', templates: 'api/templates/', reflections: 'api/reflections/', reviews: 'api/reviews/', pages: 'api/pages/' };
+  const PATH = { menus: 'api/menus/', templates: 'api/templates/', reflections: 'api/reflections/', reviews: 'api/reviews/', pages: 'api/pages/', classes: 'api/classes/', focus: 'api/focus/' };
   let offline = false, peak = 0, busy = null, again = false, okT = 0;
   const subs = new Set();
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } };
@@ -123,6 +124,9 @@ const Outbox = (() => {
   setInterval(() => { if (Object.keys(load()).length) flush(); else show(); }, 2500);
   addEventListener('load', () => { show(); if (Object.keys(load()).length) flush(); });
 
-  return { put, del, append, withAppends, dropAppends, peek, flush, list, get, count, pending, show, on: (fn) => subs.add(fn), isOffline: () => offline || !navigator.onLine };
+  // まだ送っていない分の中身（カレンダーの印に重ねる）・消した id
+  const bodies = (kind) => Object.values(load()).filter((it) => it.kind === kind && it.op === 'put').map((it) => JSON.parse(JSON.stringify(it.body)));
+  const deleted = (kind) => Object.values(load()).filter((it) => it.kind === kind && it.op === 'delete').map((it) => it.id);
+  return { bodies, deleted, put, del, append, withAppends, dropAppends, peek, flush, list, get, count, pending, show, on: (fn) => subs.add(fn), isOffline: () => offline || !navigator.onLine };
 })();
 window.Outbox = Outbox;

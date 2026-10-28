@@ -9,6 +9,8 @@
      読む分は、前に読みこんだもの（端末の IndexedDB）を見せる
    ・手書きの文字の読み取りは、この端末ではしない（本部の Mac が後で読む）
    ・写真・声のファイルは jr-files の棚の {uid}/... に置く（JR.files）
+   ・10/28 追加③：クラス（jr_classes）・今月の重点（jr_focus）・今週のお便り（jr_letters。見るだけ）・カレンダー用の1日ごとのまとめ（api/days）
+     journal.sql の「追加③」を本番に流す前は、その表がない → クラス・重点は端末に残して（送信待ち）、表ができたら送る。お便りは「まだない」
    ========================================================= */
 'use strict';
 (() => {
@@ -145,9 +147,11 @@ body.jr-locked{overflow:hidden}
   class Offline extends Error {}
   class Bad extends Error {}
   class Auth extends Error {}
+  class NotReady extends Error {}                                  // 表がまだない（journal.sql の追加③を流す前）
   async function q(builder) {
     const { data, error, status } = await builder;
     if (!error) return data;
+    if (/PGRST205|42P01|Could not find the table|does not exist/.test(`${error.code || ''} ${error.message || ''}`)) throw new NotReady(error.message);
     if (!status) throw new Offline(error.message);                // 電波がない・25 秒で打ち切り
     if (status === 401 || status === 403) {                       // ログインが切れた／見てはいけない
       let s = null; try { ({ data: { session: s } } = await sb.auth.getSession()); } catch {}
@@ -296,6 +300,71 @@ body.jr-locked{overflow:hidden}
       if (local.from_date && (!out.from_date || local.from_date >= out.from_date)) out = local;
       return [200, out];
     }
+    // ---- 10/28 追加③：クラス（jr_classes） ----
+    if ((m = path.match(/^\/api\/classes(?:\/([0-9a-z-]+))?$/))) {
+      const id = m[1];
+      if (!id && method === 'GET') {
+        const rows = await cached('classes', () => q(sb.from('jr_classes').select('id,name,days,start_time,end_time,sort,is_default,created_at,updated_at').eq('owner', uid)));
+        return [200, rows.map((r) => ({ ...r, days: r.days || [], start_time: hm(r.start_time), end_time: hm(r.end_time) })).sort((a, b) => a.sort - b.sort || String(a.created_at).localeCompare(String(b.created_at)))];
+      }
+      if (id && R.isCid(id)) {
+        if (method === 'PUT') {
+          const c = R.cleanClass(id, body, null);
+          const r = (await q(sb.from('jr_classes').upsert({ owner: uid, id, name: c.name, days: c.days, start_time: c.start_time, end_time: c.end_time, sort: c.sort, is_default: c.is_default, created_at: c.created_at }, { onConflict: 'owner,id' }).select('updated_at')))[0];
+          return [200, { ok: true, updated_at: r.updated_at }];
+        }
+        if (method === 'DELETE') { await q(sb.from('jr_classes').delete().eq('owner', uid).eq('id', id)); return [200, { ok: true }]; }
+      }
+      return [400, { error: 'bad id' }];
+    }
+    // ---- 今月の重点（jr_focus。id = 月の1日-クラスの id） ----
+    if ((m = path.match(/^\/api\/focus(?:\/([0-9a-z-]+))?$/))) {
+      const id = m[1];
+      if (!id && method === 'GET') {
+        const mo = sp.get('month');
+        const rows = await cached('focus:' + (mo || ''), () => { let b = sb.from('jr_focus').select('month,class_id,text,updated_at').eq('owner', uid); if (mo && R.isMonth(mo)) b = b.eq('month', mo); return q(b); });
+        return [200, rows.map((r) => ({ id: R.focusId(r.month, r.class_id), ...r }))];
+      }
+      const k = id && R.parseFocusId(id);
+      if (k) {
+        if (method === 'PUT') {
+          const f = R.cleanFocus({ ...body, ...k });
+          const r = (await q(sb.from('jr_focus').upsert({ owner: uid, month: f.month, class_id: f.class_id, text: f.text }, { onConflict: 'owner,month,class_id' }).select('updated_at')))[0];
+          return [200, { ok: true, updated_at: r.updated_at }];
+        }
+        if (method === 'DELETE') { await q(sb.from('jr_focus').delete().eq('owner', uid).eq('month', k.month).eq('class_id', k.class_id)); return [200, { ok: true }]; }
+      }
+      return [400, { error: 'bad id' }];
+    }
+    // ---- 今週のお便り（jr_letters。本部が置く。ここでは見るだけ） ----
+    if (path === '/api/letters' && method === 'GET') {
+      let rows;
+      try { rows = await cached('letters', () => q(sb.from('jr_letters').select('week,title,made_at,counts:body->counts').eq('owner', uid))); }
+      catch (e) { if (e instanceof NotReady) return [200, []]; throw e; }
+      return [200, rows.filter((r) => R.isMonday(r.week)).map((r) => { const l = R.cleanLetter({ ...r, body: { counts: r.counts } }); return { week: l.week, title: l.title, made_at: l.made_at, counts: l.body.counts }; })
+        .sort((a, b) => b.week.localeCompare(a.week))];
+    }
+    if ((m = path.match(/^\/api\/letters\/(\d{4}-\d{2}-\d{2})$/)) && method === 'GET') {
+      if (!R.isMonday(m[1])) return [404, { error: 'not found' }];
+      let l;
+      try { l = await cached('letter:' + m[1], async () => (await q(sb.from('jr_letters').select('week,title,body,made_at').eq('owner', uid).eq('week', m[1])))[0] || 'none'); }
+      catch (e) { if (e instanceof NotReady) return [404, { error: 'not found' }]; throw e; }
+      return l === 'none' ? [404, { error: 'not found' }] : [200, R.cleanLetter(l)];
+    }
+    // ---- 記録のカレンダー：from〜to の1日ごとのまとめ ----
+    if (path === '/api/days' && method === 'GET') {
+      const from = sp.get('from') || '', to = sp.get('to') || '';
+      if (!R.isDate(from) || !R.isDate(to) || from > to || to > R.addDaysTo(from, 62)) return [400, { error: 'bad range' }];
+      const out = await cached(`days:${from}:${to}`, async () => {
+        const rng = (t, cols) => q(sb.from(t).select(cols).eq('owner', uid).gte('date', from).lte('date', to));
+        const [pages, menus, refl, reviews] = await Promise.all([
+          rng('jr_pages', 'date,ink0:ink->0->>t,text'), rng('jr_menus', 'id,date,title,start_time,end_time,items,from_kind,created_at'),
+          rng('jr_reflections', 'id,date,about,said,points,status'), rng('jr_reviews', 'id,date,event'),
+        ]);
+        return R.daySummary({ pages: pages.map((p) => ({ date: p.date, ink: !!p.ink0, text: p.text })), menus: menus.map(menuOf), reflections: refl, reviews }, from, to);
+      });
+      return [200, out];
+    }
     // ---- 昔の記録（Notion から。見るだけ） ----
     if (path === '/api/archive' && method === 'GET') {
       const rows = await q(sb.from('jr_archive').select('notion_id,date,title,menu,props').eq('owner', uid));
@@ -345,6 +414,7 @@ body.jr-locked{overflow:hidden}
     } catch (e) {
       if (e instanceof Offline) throw new TypeError('Failed to fetch');   // fetch と同じ形（outbox.js が「送信待ち」にする）
       if (e instanceof Auth) return resp(503, { error: 'login' });       // 送信待ちに残す（入り直したら送る）
+      if (e instanceof NotReady) return resp(503, { error: 'not-ready' }); // 表がまだない：送信待ちに残す（表ができたら送る）
       if (e instanceof Bad) return resp(400, { error: e.message });
       if (e instanceof TypeError) throw e;
       console.error(e);

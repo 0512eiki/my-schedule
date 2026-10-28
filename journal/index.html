@@ -319,6 +319,108 @@ body:not([data-view=ink]) .v-ink,body:not([data-view=menu]) .v-menu,body:not([da
   .seg button{font-size:13px}
   .mn-title{flex-basis:100%}
 }
+/* 📚 記録＝カレンダー・🎯 今月の重点（10/28 追加③。見本 journal-records-calendar.html） */
+.rec{display:flex;flex-direction:column;gap:6px;margin:0 0 6px}
+.rec-head{display:flex;align-items:center;gap:6px;padding:0 2px}
+.rec-head b{font-family:var(--mincho);font-size:16px;margin-right:auto}
+.rec-head .lnk{font-size:12px;padding:6px 6px}
+.seg2{display:flex;gap:2px;padding:2px;border-radius:10px;background:rgba(30,40,80,.07)}
+.seg2 button{border:0;background:none;font-size:12.5px;min-width:38px;height:30px;border-radius:8px;color:var(--dim);padding:0 8px}
+.seg2 button.on{background:#fff;color:var(--acc);font-weight:700;box-shadow:0 1px 4px rgba(40,50,90,.12)}
+.fx{display:flex;flex-direction:column;gap:2px;text-align:left;border:1px solid var(--line);background:rgba(255,255,255,.7);border-radius:12px;padding:7px 10px;font-size:12.5px;line-height:1.5;min-width:0;width:100%}
+.fx-h{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;font-size:12px}
+.fx-h small{font-weight:400;color:var(--acc);font-size:11.5px;white-space:nowrap}
+.fx-l{overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all}
+.fx-l b{color:var(--dim);font-weight:600}
+.fx-l i{font-style:normal;color:var(--faint)}
+.fx-more{font-size:11px;color:var(--faint)}
+.fx-add{color:var(--acc);font-weight:600}
+.cal{border-radius:12px;background:rgba(255,255,255,.72);border:1px solid var(--line);padding:6px 5px}
+.cal .mh{display:flex;justify-content:space-between;align-items:center;padding:0 2px 4px}
+.cal .mh b{font-size:13.5px;font-variant-numeric:tabular-nums}
+.cal .grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;text-align:center}
+.cal .w{font-size:10px;color:var(--faint);padding-bottom:1px}
+.cal .w.we{color:#a06a6a}
+.cd{border:0;background:none;border-radius:8px;min-height:42px;padding:3px 0 2px;display:flex;flex-direction:column;align-items:center;gap:1px;font-size:11.5px;color:var(--dim);min-width:0}
+.cd .n{font-variant-numeric:tabular-nums;line-height:1.2}
+.cd .ic{font-size:9px;line-height:1.2;display:flex;flex-wrap:wrap;justify-content:center;max-width:100%;letter-spacing:-.5px}
+.cd.o{color:rgba(0,0,0,.25)} .cd.o .ic{opacity:.55}
+.cd.p{background:rgba(53,82,212,.08);color:var(--text);font-weight:600}
+.cd.m{background:rgba(214,138,0,.15)}
+.cd.on{background:rgba(53,82,212,.18)}
+.cd.t{box-shadow:inset 0 0 0 2px var(--acc)}
+.dot-plan{font-style:normal;font-weight:900;color:var(--acc);font-size:16px;line-height:.6}
+.cal-key{font-size:9.5px;color:var(--faint);text-align:center;margin-top:5px;line-height:1.5}
+.cal-key span{white-space:nowrap}
+.cal.week{padding:4px 8px}
+.wd{display:flex;gap:8px;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:none;padding:6px 2px;font-size:12px;line-height:1.45;border-radius:0;min-width:0}
+.wd:first-of-type{border-top:0}
+.wd b{width:38px;flex:none;font-size:12px;font-variant-numeric:tabular-nums}
+.wd.t b{color:var(--acc)} .wd.on{background:rgba(53,82,212,.08)}
+.wd .x{display:flex;flex-direction:column;min-width:0;flex:1;color:var(--dim)}
+.wd .ln{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wd .ln.dim{color:var(--faint)}
+.chip.cls{font-size:10px;padding:1px 6px;margin-right:3px;vertical-align:1px}
+.letter-btn{background:rgba(255,253,248,.9);border:1px solid rgba(214,138,0,.25);font-weight:600}
+details.fold{border-top:1px solid var(--line);padding-top:2px}
+details.fold>summary{list-style:none;cursor:pointer;font-size:11.5px;color:var(--faint);padding:7px 6px;letter-spacing:.06em;display:flex;align-items:center;gap:6px}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::before{content:"▸";font-size:10px;transition:transform .15s}
+details.fold[open]>summary::before{transform:rotate(90deg)}
+details.fold>summary .fold-n{margin-left:auto;font-size:10.5px}
+/* 上に重ねる画面（重点の詳細・クラス・お便り） */
+.fo-month{display:flex;align-items:center;justify-content:center;gap:12px;padding:0 14px 6px}
+.fo-month b{font-size:15px;min-width:110px;text-align:center}
+.fo-month b small{display:block;font-size:10.5px;color:var(--acc);font-weight:600}
+.fo-row{background:rgba(255,255,255,.78);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px}
+.fo-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.fo-top b{font-size:15px}
+.fo-top small{color:var(--faint);font-size:12px}
+.fo-def{margin-left:auto;border:1px solid var(--line2);background:#fff;border-radius:999px;height:32px;padding:0 12px;font-size:12.5px;color:var(--dim);white-space:nowrap}
+.fo-def.on{background:rgba(214,138,0,.15);border-color:transparent;color:var(--warn);font-weight:700}
+.fo-tx{width:100%;border-radius:10px;border:1px solid var(--line2);background:#fff;padding:9px 11px;font-size:15px;line-height:1.55;resize:vertical;outline:none;min-height:48px}
+.fo-tx:focus{border-color:var(--acc)}
+.fo-note{font-size:12px;color:var(--faint);line-height:1.6;margin:4px 2px}
+.fo-none .row{margin-top:10px}
+.cl-row{display:flex;align-items:center;gap:8px;padding:9px 2px;border-top:1px solid var(--line)}
+.cl-row:first-child{border-top:0}
+.cl-txt{flex:1;min-width:0;display:flex;flex-direction:column}
+.cl-txt b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-txt small{font-size:12px;color:var(--faint)}
+.cl-row .ops{display:flex;gap:4px;flex:none}
+.ib.sm.sure{width:auto;padding:0 8px;font-size:12px;background:rgba(207,52,52,.12);color:var(--bad)}
+.cl-form{background:rgba(255,255,255,.85);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.cl-form h4{margin:0 0 8px;font-size:14px;color:var(--acc)}
+.cl-lab{font-size:12px;color:var(--dim);margin:4px 0}
+.cl-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.cl-day{height:44px;border-radius:12px;border:1px solid var(--line2);background:#fff;font-size:16px;color:var(--dim);padding:0}
+.cl-day.we{color:#a06a6a}
+.cl-day.on{background:var(--grad);color:#fff;border-color:transparent;font-weight:700}
+.cl-time{display:flex;align-items:flex-end;gap:8px;margin-top:10px;flex-wrap:wrap}
+.cl-time label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--dim);flex:1;min-width:110px}
+.cl-time input{height:44px;border-radius:12px;border:1px solid var(--line2);background:#fff;padding:0 10px;font-size:16px;outline:none;width:100%}
+.cl-time span{padding-bottom:12px;color:var(--faint)}
+.cl-hint{font-size:11.5px;color:var(--faint);margin-top:6px;line-height:1.5}
+.letter{background:var(--paper);border-radius:14px;padding:16px 16px 14px;box-shadow:0 4px 14px rgba(40,50,90,.12);font-size:14.5px;line-height:1.7}
+.letter h3{margin:0 0 2px;font-family:var(--mincho);font-size:20px}
+.letter .sub{color:var(--faint);font-size:11.5px;margin-bottom:10px}
+.letter h5{margin:12px 0 3px;font-size:14px;color:var(--acc)}
+.letter ul{margin:0;padding-left:20px}
+.letter .num{display:flex;gap:8px;margin:6px 0 4px}
+.letter .num div{flex:1;min-width:0;text-align:center;background:rgba(53,82,212,.07);border-radius:10px;padding:6px 0;font-size:11.5px;color:var(--dim);white-space:nowrap}
+.letter .num b{display:block;font-size:20px;color:var(--acc)}
+.letter .next{background:rgba(214,138,0,.15);border-radius:10px;padding:8px 10px;margin-top:10px}
+.letter .next b{color:var(--warn)}
+@media (max-width:760px){
+  .side.open:not(.only-search){width:auto;right:8px}
+  .side.open:not(.only-search) .search,.side.open:not(.only-search) #searchRes{display:none}
+  .cd{min-height:52px;font-size:13.5px}
+  .cd .ic{font-size:11px}
+  .cal .w{font-size:11px}
+  .wd{font-size:13px} .wd b{width:44px;font-size:13px}
+  .fx{font-size:13.5px}
+  .cl-row .ops .ib.sm{width:38px;height:38px}
+}
 .scrim{display:none;position:fixed;inset:0;z-index:25;background:rgba(10,12,25,.25)}
 .scrim.show{display:block}
 </style>
@@ -331,18 +433,27 @@ body:not([data-view=ink]) .v-ink,body:not([data-view=menu]) .v-menu,body:not([da
     <div id="searchRes" hidden></div>
     <div class="sr-tip">日誌・手書きの文字・試合の反省・メニュー・振り返り・昔の記録（Notion）から さがせます</div>
     <div id="sideNormal">
+    <!-- 10/28 追加③：上は 📚 記録のカレンダー（月／週）と 🎯 今月の重点（records.js）。今までの一覧は下にたたんで残す -->
+    <div id="recBox" class="rec"></div>
+    <details class="fold" data-fold="days"><summary>練習の日</summary>
     <button class="pg" id="goToday">＋ 今日のページ</button>
-    <div class="sec">練習の日</div>
     <div id="list"></div>
-    <div class="sec">試合の反省</div>
+    </details>
+    <details class="fold" data-fold="rv"><summary>試合の反省</summary>
     <button class="pg" id="rvNew">＋ 試合の反省を書く</button>
     <button class="pg" id="rvImport">📥 貼り付けて取り込む</button>
     <div id="rvList"></div>
-    <div class="sec">練習メニューの型</div>
+    </details>
+    <details class="fold" data-fold="tpl"><summary>練習メニューの型</summary>
     <div id="tplList"></div>
     <button class="pg" id="tplNew">＋ 型を作る</button>
-    <div class="sec">昔の記録（Notion から）</div>
+    </details>
+    <details class="fold" data-fold="arc"><summary>昔の記録（Notion から）</summary>
     <div id="arcList"></div>
+    </details>
+    <details class="fold" data-fold="letters"><summary>📮 お便り<small class="fold-n"></small></summary>
+    <div id="letterList"></div>
+    </details>
     </div>
     <div class="lock">🔒 見られるのは本人（コーチ）だけ<br>ログイン中：<span id="jrWho"></span> <button class="lnk" id="jrLogout">ログアウト</button></div>
   </aside>
@@ -576,7 +687,7 @@ async function renderList(){
     const info = x._new ? 'まだ空' : [x.menus ? '📋' : '', x.strokes ? '✒️'+(typeof x.strokes==='number' ? x.strokes : '') : '', x.textLen ? '📝' : '', x.refl ? '💬' : ''].filter(Boolean).join(' ');
     const name = `${dt.getMonth()+1}/${dt.getDate()} ${WD[dt.getDay()]} ${escapeHtml(x.title||'')}`;
     return `<button class="pg ${x.date===state.date?'on':''}" data-d="${x.date}">${name}<small>${info}</small></button>`;
-  }).join('');
+  }).join('');  dispatchEvent(new Event('jr:changed'));   // 記録のカレンダー（records.js）も読み直す
 }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 $('list').addEventListener('click', e=>{ const b=e.target.closest('.pg'); if(b) openDate(b.dataset.d); });
@@ -835,5 +946,6 @@ openDate(start);
 <script type="module" src="review.js"></script>
 <script type="module" src="practice.js"></script>
 <script type="module" src="reflect.js"></script>
+<script type="module" src="records.js"></script>
 </body>
 </html>
