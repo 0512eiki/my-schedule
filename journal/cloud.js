@@ -172,7 +172,7 @@ body.jr-locked{overflow:hidden}
     catch (e) { if (e instanceof Bad) throw e; const v = await idb.get(key); if (v !== undefined) return v; throw e; }
   }
   const pageOf = (r) => ({ date: r.date, title: r.title || '', bg: r.bg || 'lined', ink: Array.isArray(r.ink) ? r.ink : [], text: r.text || '', read: r.read || null, createdAt: ms(r.created_at), updatedAt: ms(r.updated_at) });
-  const menuOf = (r) => ({ id: r.id, date: r.date, title: r.title, start_time: hm(r.start_time), end_time: hm(r.end_time), items: r.items || [], from_kind: r.from_kind || '', from_id: r.from_id || '', created_at: r.created_at, updated_at: r.updated_at });
+  const menuOf = (r) => ({ id: r.id, date: r.date, title: r.title, start_time: hm(r.start_time), end_time: hm(r.end_time), items: r.items || [], from_kind: r.from_kind || '', from_id: r.from_id || '', class_id: r.class_id || '', created_at: r.created_at, updated_at: r.updated_at });
   const tplOf = (r) => ({ id: r.id, name: r.name, items: r.items || [], sort: r.sort || 0, created_at: r.created_at, updated_at: r.updated_at });
   const reflOf = (r) => ({ id: r.id, date: r.date, menu_id: r.menu_id, about: r.about, said: r.said || '', audio: r.audio || '', points: r.points || [], status: r.status, name_warn: !!r.name_warn, created_at: r.created_at, updated_at: r.updated_at });
   const pendingBodies = (kind) => { try { return Object.values(JSON.parse(localStorage.getItem('jr:outbox') || '{}')).filter((it) => it.kind === kind && it.op === 'put').map((it) => it.body); } catch { return []; } };
@@ -279,6 +279,7 @@ body.jr-locked{overflow:hidden}
             row = { id, date: c.date, title: c.title, start_time: c.start_time, items: c.items, from_kind: c.from_kind, from_id: c.from_id, created_at: c.created_at };
             // end_time は予定から入った行（本部が作る）だけにある。それ以外は送らない（journal.sql の追加②を流す前でも保存できるように）
             if (c.end_time || R.isCalId(id)) row.end_time = c.end_time;
+            row.class_id = c.class_id;   // 10/28 追加④（journal.sql の追加④を本番に流してから公開する）
           }
           else if (kind === 'templates') { const c = R.cleanTemplate(id, body, null); row = { id, name: c.name, items: c.items, sort: c.sort, created_at: c.created_at }; }
           else { const c = R.cleanReflection(id, body, null); row = { id, date: c.date, menu_id: c.menu_id, about: c.about, said: c.said, audio: c.audio, points: c.points, status: c.status, name_warn: c.name_warn, created_at: c.created_at }; }
@@ -358,7 +359,7 @@ body.jr-locked{overflow:hidden}
       const out = await cached(`days:${from}:${to}`, async () => {
         const rng = (t, cols) => q(sb.from(t).select(cols).eq('owner', uid).gte('date', from).lte('date', to));
         const [pages, menus, refl, reviews] = await Promise.all([
-          rng('jr_pages', 'date,ink0:ink->0->>t,text'), rng('jr_menus', 'id,date,title,start_time,end_time,items,from_kind,created_at'),
+          rng('jr_pages', 'date,ink0:ink->0->>t,text'), rng('jr_menus', 'id,date,title,start_time,end_time,items,from_kind,class_id,created_at'),
           rng('jr_reflections', 'id,date,about,said,points,status'), rng('jr_reviews', 'id,date,event'),
         ]);
         return R.daySummary({ pages: pages.map((p) => ({ date: p.date, ink: !!p.ink0, text: p.text })), menus: menus.map(menuOf), reflections: refl, reviews }, from, to);

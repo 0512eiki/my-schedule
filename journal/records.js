@@ -416,4 +416,4 @@ refresh();
   }
 }
 
-window.JournalRecords = { Rec, refresh, setView, move, openFocus, openClasses, openLetter, close: closeOv, classFor: (m) => classFor(m, Rec.classes), ready: () => busy || Promise.resolve() };
+window.JournalRecords = { Rec, refresh, setView, move, openFocus, openClasses, openLetter, close: closeOv, classFor: (m) => classFor(m, Rec.classes), focusOf: focusText, ready: () => busy || Promise.resolve() };

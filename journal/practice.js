@@ -12,9 +12,12 @@
    ・10/27 追加③（本人「それぞれのメニューに対する時間は必要ない。記録したいのはメニュー」）：項目は名前とメモだけ。分の欄・各項目の時刻・合計の分は出さない
      （前のデータの minutes は消さずにそのまま持つ。新しく作る項目には入れない）
    ・10/28 追加③：予定から入ったメニュー（from_kind='calendar'）の曜日・時刻が、本人の入れたクラスに合えば、題の横に小さくクラスの名前（records.js から jr:classes で受け取る）
+   ・10/28 追加④（本人「どのクラスに対しての練習メニューかを選べるように。選べたら自動的に時間も」・見本 honbu/public/mockups/journal-menu-class.html・A＝クラスの登録から）
+     メニューの上に「どのクラス？」：その曜日のクラス（＋ほかのクラス…）。押すと class_id・題・始まり・終わりが入る（rules.mjs の pickClass）。
+     予定から入って、まだ選んでいないメニューは、時間が近いクラスに「予定に近い」の印だけ（勝手には決めない）。2つ目のメニューは残りのクラスを先に選ぶ
    使っている部品（index.html 側）：$, state, openDate, today, parseD, WD, hhmm, escapeHtml, toast, closeSide, renderList, layout, Outbox, pageRead
    ========================================================= */
-import { menuFromLines, isCalId, arcParts, arcPhotos, arcPlain, classFor } from './rules.mjs';
+import { menuFromLines, isCalId, arcParts, arcPhotos, arcPlain, classFor, classesOn, minutesBetween, pickClass, monthOf } from './rules.mjs';
 const CLOUD = !!(window.JR && window.JR.cloud);
 const esc = (s) => escapeHtml(String(s ?? ''));
 const isoNow = () => new Date().toISOString();
@@ -182,27 +185,53 @@ function sure(b, label) {
 const vMenu = $('vMenu');
 let classes = [];
 addEventListener('jr:classes', (e) => {
-  const next = Array.isArray(e.detail) ? e.detail : [], key = (a) => JSON.stringify(a.map((c) => [c.id, c.name, c.days, c.start_time]));
+  const next = Array.isArray(e.detail) ? e.detail : [], key = (a) => JSON.stringify(a.map((c) => [c.id, c.name, c.days, c.start_time, c.end_time]));
   if (key(next) === key(classes)) return;            // 変わっていなければ描き直さない（メモを打っている途中などに消えないように）
   classes = next.map((c) => ({ ...c })); if (Day.view === 'menu') renderMenus();
 });
-function fromLabel(m) {
-  const c = classFor(m, classes);
-  return (c ? `<span class="chip cls" title="クラス（予定の曜日・時刻から）">${esc(c.name)}</span>` : '') + fromLabel0(m);
+const fromLabel = (m) => fromLabel0(m);   // クラスは上の「どのクラス？」に出す
+// どのクラス？（10/28 追加④）
+const others = new Set();                 // 「ほかのクラス…」を開いているメニュー
+const clsTime = (c) => (c.start_time ? `${c.start_time}${c.end_time ? '〜' + c.end_time : ''}` : '時間なし');
+function classHTML(m) {
+  if (!classes.length) return `<div class="mn-cls"><button class="lnk" data-act="cls-setup">⚙️ クラスを登録すると、ここで選べます（時間も自動で入ります）</button></div>`;
+  const on = m.class_id ? classes.find((c) => c.id === m.class_id) || null : null;
+  const guess = on ? null : classFor(m, classes);
+  const day = classesOn(m.date, classes), open = others.has(m.id);
+  let list = open ? classes.slice() : day.slice();
+  for (const c of [guess, on]) if (c && !list.includes(c)) list.unshift(c);
+  const chip = (c) => `<button class="cls-ch${c === on ? ' on' : ''}${c === guess ? ' sug' : ''}" data-act="cls-pick" data-c="${esc(c.id)}">${c === on ? '✓ ' : ''}${esc(c.name)}${c === guess ? '<span class="cls-badge">予定に近い</span>' : ''}<i>${esc(clsTime(c))}</i></button>`;
+  const more = open ? '<button class="cls-ch ghost" data-act="cls-setup">⚙️ クラスの登録</button>'
+    : (classes.some((c) => !list.includes(c)) ? '<button class="cls-ch ghost" data-act="cls-more">ほかのクラス…</button>' : '');
+  const none = on || (m.class_id && !on) ? '<button class="cls-ch ghost" data-act="cls-pick" data-c="">なし</button>' : '';
+  const wd = WD[parseD(m.date).getDay()];
+  const sub = on ? '押すと変えられる' : (day.length ? `${wd}曜のクラス` : `${wd}曜のクラスはありません`);
+  const fo = on && window.JournalRecords && JournalRecords.focusOf ? String(JournalRecords.focusOf(monthOf(m.date), on.id) || '').trim() : '';
+  return `<div class="mn-cls"><div class="mn-cls-h">どのクラス？<small>${sub}</small></div><div class="cls-chips">${list.map(chip).join('')}${more}${none}</div>
+    ${fo ? `<div class="mn-focus">🎯 今月の重点：${esc(fo)}</div>` : ''}</div>`;
+}
+// 2つ目からのメニュー：ほかのメニューでクラスを選んでいれば、その曜日の残りのクラスを先に選んでおく
+function withNextClass(nm) {
+  if (!Day.menus.some((x) => x.class_id)) return nm;
+  const rest = classesOn(nm.date, classes).filter((c) => !Day.menus.some((x) => x.class_id === c.id));
+  return rest.length ? pickClass(nm, rest[0]) : nm;
 }
 function fromLabel0(m) {
   if (m.from_kind === 'template') { const t = Day.templates.find((x) => x.id === m.from_id); return `<span class="chip">型「${esc(t ? t.name : '…')}」から</span>`; }
   if (m.from_kind === 'notion') return '<span class="chip">昔の記録（Notion）から</span>';
   if (m.from_kind === 'page') return '<span class="chip">✍️ 手書きから</span>';
-  if (!m.from_kind && isCalId(m.id)) return '<span class="chip">📅 予定から（手で直したので予定とは別）</span>';
+  if (!m.from_kind && isCalId(m.id) && !m.class_id) return '<span class="chip">📅 予定から（手で直したので予定とは別）</span>';
   return '';
 }
 // 開始時刻：予定から入っている時は表示だけ（「時刻を直す」で入力欄）
 const fixing = new Set();
 const isCal = (m) => m.from_kind === 'calendar' && !!m.start_time;
 function atHTML(m) {
-  if (isCal(m) && !fixing.has(m.id)) return `<div class="mn-at cal"><span class="mn-cal">📅 予定から ${esc(m.start_time)}${m.end_time ? '〜' + esc(m.end_time) : ''}</span><button class="lnk" data-act="fix-time">時刻を直す</button></div>`;
-  return `<label class="mn-at">開始<input type="time" data-k="start_time" value="${esc(m.start_time || '')}"></label>`;
+  if ((isCal(m) || (m.class_id && m.start_time)) && !fixing.has(m.id)) {
+    const n = minutesBetween(m.start_time, m.end_time);
+    return `<div class="mn-at cal"><span class="mn-cal">${isCal(m) ? '📅 予定から' : '🕒'} ${esc(m.start_time)}${m.end_time ? '〜' + esc(m.end_time) : ''}${n ? `<small>・${n}分</small>` : ''}</span><button class="lnk" data-act="fix-time">時刻を直す</button></div>`;
+  }
+  return `<div class="mn-at-row"><label class="mn-at">開始<input type="time" data-k="start_time" value="${esc(m.start_time || '')}"></label><label class="mn-at">終わり<input type="time" data-k="end_time" value="${esc(m.end_time || '')}"></label></div>`;
 }
 function renderMenus() {
   const d = Day.date; if (!d) return;
@@ -212,6 +241,7 @@ function renderMenus() {
   const co = carry.items.length ? `<div class="todo" id="carry"><b>🔁 前回の振り返りから（${dlabel(carry.from_date)}）</b>
       <ul>${carry.items.map((t) => `<li>${esc(t)}</li>`).join('')}</ul><small>「次へ」の印をつけた所だけ。メニューは自分で決めます（勝手には変えません）</small></div>` : '';
   const cards = Day.menus.map((m) => `<section class="card glass mn" data-menu="${m.id}">
+      ${classHTML(m)}
       <div class="mn-head">
         <input class="mn-title" data-k="title" value="${esc(m.title)}" placeholder="練習の名前（例：練習・小学生クラス）" maxlength="120">
         ${atHTML(m)}
@@ -240,7 +270,7 @@ function tplChips(mode) {
 function newMenu(d, { items, from_kind = '', from_id = '', title } = {}) {
   const now = isoNow();
   return { id: newId(d), date: d, title: title || (Day.menus.length ? '練習（2回目）' : '練習'), start_time: null, end_time: null,
-    items: items ? clone(items) : [{ name: '', note: '' }], from_kind, from_id, created_at: now, updated_at: now };
+    items: items ? clone(items) : [{ name: '', note: '' }], from_kind, from_id, class_id: '', created_at: now, updated_at: now };
 }
 function addMenu(m) {
   if (m.date === Day.date) { Day.menus.push(m); document.activeElement?.blur?.(); renderMenus(); }
@@ -251,7 +281,7 @@ const menuOf = (el) => { const c = el.closest('[data-menu]'); return c && Day.me
 vMenu.addEventListener('input', (e) => {
   const t = e.target, m = menuOf(t); if (!m) return;
   if (t.dataset.k) {
-    m[t.dataset.k] = t.dataset.k === 'start_time' ? (t.value || null) : t.value;
+    m[t.dataset.k] = /_time$/.test(t.dataset.k) ? (t.value || null) : t.value;
     // 予定から入ったメニューの時刻・題を本人が直した → もう予定には合わせない（本部の calendarMenus は from_kind='calendar' の行だけ直す）
     if (m.from_kind === 'calendar') { m.from_kind = ''; fixing.delete(m.id); }
   }
@@ -263,11 +293,19 @@ vMenu.addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act, m = menuOf(b);
   if (act === 'ask') { $('askMsg').hidden = false; return; }
-  if (act === 'new-blank') { const nm = newMenu(Day.date); addMenu(nm); setTimeout(() => vMenu.querySelector(`[data-menu="${nm.id}"] .nm`)?.focus(), 30); return; }
-  if (act === 'new-tpl') { const t = Day.templates.find((x) => x.id === b.dataset.t); if (t) addMenu(newMenu(Day.date, { items: t.items, from_kind: 'template', from_id: t.id })); return; }
+  if (act === 'cls-setup') { window.JournalRecords?.openClasses(); return; }
+  if (act === 'new-blank') { const nm = withNextClass(newMenu(Day.date)); addMenu(nm); setTimeout(() => vMenu.querySelector(`[data-menu="${nm.id}"] .nm`)?.focus(), 30); return; }
+  if (act === 'new-tpl') { const t = Day.templates.find((x) => x.id === b.dataset.t); if (t) addMenu(withNextClass(newMenu(Day.date, { items: t.items, from_kind: 'template', from_id: t.id }))); return; }
   if (act === 'new-from-ink') return fromInk(null, b);
   if (!m) return;
   if (act === 'from-ink') return fromInk(m, b);
+  if (act === 'cls-more') { others.add(m.id); document.activeElement?.blur?.(); renderMenus(); return; }
+  if (act === 'cls-pick') {
+    const c = classes.find((x) => x.id === b.dataset.c) || null, prev = classes.find((x) => x.id === m.class_id) || null;
+    Object.assign(m, pickClass(m, c, prev)); others.delete(m.id); fixing.delete(m.id);
+    Day.menus.sort((a, b2) => (a.start_time || '99').localeCompare(b2.start_time || '99') || String(a.created_at).localeCompare(String(b2.created_at)));
+    saveLater('menus', m, 0); document.activeElement?.blur?.(); renderMenus(); return;
+  }
   if (act === 'fix-time') { fixing.add(m.id); document.activeElement?.blur?.(); renderMenus(); setTimeout(() => vMenu.querySelector(`[data-menu="${m.id}"] [data-k=start_time]`)?.focus(), 30); return; }
   if (act === 'fill-tpl') { const t = Day.templates.find((x) => x.id === b.dataset.t); if (!t) return; m.items = clone(t.items); m.from_kind = 'template'; m.from_id = t.id; }
   else if (act === 'to-tpl') { return saveAsTemplate(m); }
@@ -457,11 +495,39 @@ async function loadArcPhotos(box) {
     } catch { b.innerHTML = '<span class="ar-ph-wait">📷 写真を読みこめませんでした（電波を確かめてください）</span>'; }
   }
 }
-// 押すと大きく見る（もう一度押すか ✕ で閉じる。2本指で拡大できる）
+// 押すと大きく見る（押すか ✕ で閉じる）
+// 10/28 本人「写真は2本指で拡大できてほしい。ダブルタップのズームだけ無くして」→ 画面全体は固定のまま、写真だけを2本指で拡大・1本指で動かす
 function showPhoto(url) {
   const v = document.createElement('div'); v.className = 'ph-view'; v.setAttribute('role', 'dialog');
   v.innerHTML = `<img alt="写真" src="${esc(url)}"><button class="ib" title="閉じる">✕</button>`;
-  v.addEventListener('click', () => v.remove());
+  const img = v.querySelector('img');
+  let sc = 1, x = 0, y = 0, start = null, moved = false;
+  const put = () => { img.style.transform = `translate(${x}px,${y}px) scale(${sc})`; };
+  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const mid = (t) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+  v.addEventListener('touchstart', (e) => {
+    const t = e.touches;
+    if (t.length === 2) { moved = true; start = { d: dist(t), m: mid(t), sc, x, y }; }
+    else if (t.length === 1) start = { p: { x: t[0].clientX, y: t[0].clientY }, x, y };
+  }, { passive: true });
+  v.addEventListener('touchmove', (e) => {
+    const t = e.touches; if (!start) return;
+    e.preventDefault();
+    if (t.length === 2 && start.d) {
+      const k = Math.min(6, Math.max(1, start.sc * dist(t) / start.d)), m = mid(t);
+      x = start.x + (m.x - start.m.x); y = start.y + (m.y - start.m.y); sc = k; put();
+    } else if (t.length === 1 && start.p) {
+      const dx = t[0].clientX - start.p.x, dy = t[0].clientY - start.p.y;
+      if (Math.abs(dx) + Math.abs(dy) > 8) moved = true;
+      if (sc > 1) { x = start.x + dx; y = start.y + dy; put(); }
+    }
+  }, { passive: false });
+  v.addEventListener('touchend', (e) => {
+    if (e.touches.length === 1) start = { p: { x: e.touches[0].clientX, y: e.touches[0].clientY }, x, y };
+    else if (!e.touches.length) { start = null; if (sc <= 1.02) { sc = 1; x = 0; y = 0; put(); } }
+  });
+  // 押しただけ（動かしていない）なら閉じる。拡大・移動のあとの指を離した時は閉じない
+  v.addEventListener('click', (e) => { if (moved && !e.target.closest('.ib')) { moved = false; return; } v.remove(); });
   document.body.appendChild(v);
 }
 tov.addEventListener('click', (e) => { const b = e.target.closest('.ar-ph[data-url]'); if (b) { e.stopPropagation(); showPhoto(b.dataset.url); } });
@@ -510,5 +576,5 @@ renderArcList();
 reload();
 
 window.JournalDay = Day;
-window.JournalPractice = { openArchive, fromInk: (i = 0) => fromInk(Day.menus[i] || null, document.createElement('button')), openTemplate: (id) => { const t = Day.templates.find((x) => x.id === id); if (t) openTemplate(t); }, ready: () => Day.loading, reload, menuFromText,
+window.JournalPractice = { openArchive, showPhoto, fromInk: (i = 0) => fromInk(Day.menus[i] || null, document.createElement('button')), openTemplate: (id) => { const t = Day.templates.find((x) => x.id === id); if (t) openTemplate(t); }, ready: () => Day.loading, reload, menuFromText,
   _menus: () => Day.menus, _templates: () => Day.templates };   // _ は動作確認用

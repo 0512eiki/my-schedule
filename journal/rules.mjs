@@ -47,6 +47,7 @@ export function cleanMenu(id, b, cur) {
   return { id, date: isDate(b.date) ? b.date : id.slice(0, 10), title: clip(b.title, 120),
     start_time: hm(b.start_time), end_time: hm(b.end_time), items: cleanItems(b.items),
     from_kind: FROM_KINDS.includes(b.from_kind) ? b.from_kind : '', from_id: clip(b.from_id, 80),
+    class_id: isCid(b.class_id) ? b.class_id : '',   // 10/28 追加④：どのクラスのメニューか（jr_classes.id。なければ空）
     created_at: (cur && cur.created_at) || isoOr(b.created_at, isoNow()), updated_at: isoNow() };
 }
 
@@ -206,9 +207,13 @@ export function cleanLetter(l) {
     made_at: (l && l.made_at) || null };
 }
 
-// 予定から入ったメニュー（from_kind='calendar'）→ どのクラスか（曜日が合い、始まりの時刻が30分以内。時刻のないクラスは、その曜日にほかの候補がない時だけ）
+// メニュー → どのクラスか
+// ・本人が選んだクラス（class_id）があればそれ（10/28 追加④。クラスを消していたら null）
+// ・選んでいない予定から入ったメニュー（from_kind='calendar'）は、曜日が合い、始まりの時刻が30分以内のクラス（時刻のないクラスは、その曜日にほかの候補がない時だけ）
 export function classFor(menu, classes) {
-  if (!menu || menu.from_kind !== 'calendar' || !isDate(menu.date) || !Array.isArray(classes)) return null;
+  if (!menu || !Array.isArray(classes)) return null;
+  if (menu.class_id) return classes.find((c) => c.id === menu.class_id) || null;
+  if (menu.from_kind !== 'calendar' || !isDate(menu.date)) return null;
   const wd = isoDay(menu.date), min = (t) => (/^\d{2}:\d{2}/.test(t || '') ? +t.slice(0, 2) * 60 + +t.slice(3, 5) : null);
   const at = min(menu.start_time);
   const cands = classes.filter((c) => (c.days || []).includes(wd));
@@ -222,6 +227,28 @@ export function classFor(menu, classes) {
   if (best) return best;
   const loose = cands.filter((c) => min(c.start_time) == null);
   return loose.length === 1 && cands.length === 1 ? loose[0] : null;
+}
+// その日（曜日）のクラス（並びは登録の順）
+export const classesOn = (date, classes) => (isDate(date) && Array.isArray(classes) ? classes.filter((c) => (c.days || []).includes(isoDay(date))) : []);
+// 始まり〜終わりの長さ（分）。どちらかがない・終わりが前なら null
+export function minutesBetween(a, b) {
+  const min = (t) => (/^\d{2}:\d{2}/.test(t || '') ? +t.slice(0, 2) * 60 + +t.slice(3, 5) : null);
+  const x = min(a), y = min(b);
+  return x == null || y == null || y <= x ? null : y - x;
+}
+// クラスを選んだ時のメニューの直し方（10/28 追加④・本人「クラスを選べたら自動的に時間とかも組み込まれる」）
+// ・class_id を入れる。クラスに時刻があれば始まり・終わりもそれにする
+// ・題は、まだ自分で付けていない時（空・「練習」「練習（2回目）」・予定の名前のまま・前のクラスの名前）だけクラスの名前にする
+// ・予定から入ったメニュー（from_kind='calendar'）は、本人が決めたので、もう予定には合わせない（from_kind=''。from_id は残す）
+export function pickClass(menu, cls, prev = null) {
+  const m = { ...menu };
+  const plain = !String(m.title || '').trim() || /^練習(（\d+回目）)?$/.test(m.title) || m.from_kind === 'calendar' || (prev && m.title === prev.name);
+  if (!cls) { m.class_id = ''; if (prev && m.title === prev.name) m.title = '練習'; return m; }
+  m.class_id = cls.id;
+  if (plain) m.title = cls.name;
+  if (cls.start_time) { m.start_time = cls.start_time; m.end_time = cls.end_time || null; }
+  if (m.from_kind === 'calendar') m.from_kind = '';
+  return m;
 }
 
 // 振り返りの1行目（まとめがあればその最初の文、なければ話した言葉の最初の行）
@@ -242,7 +269,7 @@ export function daySummary({ pages = [], menus = [], reflections = [], reviews =
     const items = Array.isArray(m.items) ? m.items : [];
     const names = items.map((i) => String((i && i.name) || '').trim()).filter(Boolean);
     day(m.date).menus.push({ id: m.id, title: m.title || '', start_time: m.start_time ? String(m.start_time).slice(0, 5) : null, end_time: m.end_time ? String(m.end_time).slice(0, 5) : null,
-      from_kind: m.from_kind || '', n: names.length, names: names.slice(0, 6).map((s) => s.slice(0, 30)) });
+      from_kind: m.from_kind || '', class_id: m.class_id || '', n: names.length, names: names.slice(0, 6).map((s) => s.slice(0, 30)) });
   }
   for (const r of reflections) if (inR(r.date)) { const f = reflFirst(r); if (f) day(r.date).refl.push({ id: r.id, about: r.about === 'self' ? 'self' : 'class', first: f }); }
   for (const v of reviews) if (inR(v.date)) day(v.date).reviews.push({ id: v.id, event: clip(v.event, 60) });
