@@ -120,22 +120,38 @@ function showNote(b, v) {
 }
 const nov = document.createElement('div');
 nov.className = 'rv-ov note-ov'; nov.hidden = true;
-nov.innerHTML = '<div class="glass note-pop"><div class="note-head"><b class="note-ttl"></b><button type="button" class="btn note-done">完了</button></div><textarea class="note-tx" maxlength="500" placeholder="メモ（なくてもOK）"></textarea></div>';
+nov.innerHTML = '<div class="note-pop"><div class="note-head"><b class="note-ttl"></b><button type="button" class="btn note-done">完了</button></div><textarea class="note-tx" maxlength="500" placeholder="メモ（なくてもOK）"></textarea></div>';
 document.body.appendChild(nov);
 const ntx = nov.querySelector('.note-tx');
 let noteIn = null;   // いま直しているメモ（項目の hidden の欄）
+let composing = false;   // 日本語の変換の途中（この間は保存しない。途中で触ると変換の候補が出ずにひらがなで確定してしまう）
+// iPhone のキーボードが出ても、入力画面が見えている所にぴったり入るように
+const vv = window.visualViewport;
+function fitNote() {
+  if (nov.hidden) return;
+  nov.style.top = (vv ? vv.offsetTop : 0) + 'px';
+  nov.style.height = (vv ? vv.height : innerHeight) + 'px';
+}
+if (vv) { vv.addEventListener('resize', fitNote); vv.addEventListener('scroll', fitNote); }
+function pushNote() {
+  if (!noteIn || noteIn.value === ntx.value) return;
+  noteIn.value = ntx.value; noteIn.dispatchEvent(new Event('input', { bubbles: true }));
+}
 function openNote(b) {
   const row = b.closest('.mi'); noteIn = row.querySelector('input.note');
   nov.querySelector('.note-ttl').textContent = (row.querySelector('.nm').value || '').trim() || 'メモ';
-  ntx.value = noteIn.value; nov.hidden = false;
-  ntx.focus(); ntx.setSelectionRange(ntx.value.length, ntx.value.length);
+  ntx.value = noteIn.value; nov.hidden = false; fitNote();
+  ntx.focus({ preventScroll: true }); ntx.setSelectionRange(ntx.value.length, ntx.value.length);
 }
-function closeNote() { nov.hidden = true; noteIn = null; ntx.blur(); }
-// 打つたびに項目へ（いつもの保存の流れにのせる）
-ntx.addEventListener('input', () => { if (!noteIn) return; noteIn.value = ntx.value; noteIn.dispatchEvent(new Event('input', { bubbles: true })); });
+function closeNote() { composing = false; pushNote(); nov.hidden = true; noteIn = null; ntx.blur(); }
+// 打つたびに項目へ（いつもの保存の流れにのせる）。変換の途中は待って、決まってから
+ntx.addEventListener('compositionstart', () => { composing = true; });
+ntx.addEventListener('compositionend', () => { composing = false; pushNote(); });
+ntx.addEventListener('input', (e) => { if (composing || e.isComposing) return; pushNote(); });
+ntx.addEventListener('blur', () => { if (!composing) pushNote(); });
 nov.querySelector('.note-done').addEventListener('click', closeNote);
 nov.addEventListener('click', (e) => { if (e.target === nov) closeNote(); });
-document.addEventListener('keydown', (e) => { if (!nov.hidden && e.key === 'Escape') closeNote(); });
+document.addEventListener('keydown', (e) => { if (!nov.hidden && e.key === 'Escape' && !e.isComposing) closeNote(); });
 document.addEventListener('click', (e) => {
   const b = e.target.closest && e.target.closest('.mi .note-btn'); if (!b) return;
   e.preventDefault(); e.stopPropagation(); openNote(b);
