@@ -298,9 +298,9 @@ body.jr-locked{overflow:hidden}
     }
     // ---- 昔の記録（Notion から。見るだけ） ----
     if (path === '/api/archive' && method === 'GET') {
-      const rows = await q(sb.from('jr_archive').select('notion_id,date,title,menu').eq('owner', uid));
+      const rows = await q(sb.from('jr_archive').select('notion_id,date,title,menu,props').eq('owner', uid));
       rows.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-      return [200, rows.map((a) => ({ notion_id: a.notion_id, date: a.date || null, title: a.title || '', hasMenu: !!String(a.menu || '').trim() }))];
+      return [200, rows.map(R.arcListRow)];
     }
     if ((m = path.match(/^\/api\/archive\/([A-Za-z0-9-]+)$/)) && method === 'GET') {
       const a = (await q(sb.from('jr_archive').select('*').eq('owner', uid).eq('notion_id', m[1])))[0];

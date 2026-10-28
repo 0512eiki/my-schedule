@@ -114,6 +114,30 @@ export function menuFromLines(text) {
   }
   return out;
 }
+/* 昔の記録（Notion から）の写真の印：1行に [[写真:archive/<notion_id>/<番号>.jpg]]。写真は jr-files の {本人 uid}/ の下に置いてある */
+export const ARC_PHOTO_RE = /^\s*\[\[写真:(archive\/[A-Za-z0-9-]{8,64}\/\d{1,3}\.jpg)\]\]\s*$/;
+// 文 → 部品の並び（{ text } か { photo: 置き場所 }）。改行はそのまま text に残す
+export function arcParts(text) {
+  const out = [];
+  for (const l of String(text || '').replace(/\r\n?/g, '\n').split('\n')) {
+    const m = l.match(ARC_PHOTO_RE);
+    if (m) { out.push({ photo: m[1] }); continue; }
+    const last = out[out.length - 1];
+    if (last && 'text' in last) last.text += '\n' + l; else out.push({ text: l });
+  }
+  return out.map((p) => ('text' in p ? { text: p.text.replace(/^\n+|\n+$/g, '') } : p)).filter((p) => !('text' in p) || p.text.trim());
+}
+// 写真の置き場所の並び（props.images。なければ文の中の印から）
+export function arcPhotos(a) {
+  const im = a && a.props && Array.isArray(a.props.images) ? a.props.images.filter((p) => /^archive\/[A-Za-z0-9-]{8,64}\/\d{1,3}\.jpg$/.test(p)) : null;
+  if (im && im.length) return im;
+  return [...arcParts(a && a.menu), ...arcParts(a && a.body)].filter((p) => p.photo).map((p) => p.photo);
+}
+// 一覧に返す形（📋 メニューあり・📷 写真の枚数）
+export const arcListRow = (a) => ({ notion_id: a.notion_id, date: a.date || null, title: a.title || '', hasMenu: !!String(a.menu || '').replace(/^\s*\[\[写真:[^\]]*\]\]\s*$/gm, '').trim(), photos: arcPhotos(a).length });
+// 写真の印を取った文（メニューを今日に写す・さがすとき）
+export const arcPlain = (t) => String(t || '').replace(/^\s*\[\[写真:[^\]]*\]\]\s*$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+
 export function cleanTemplate(id, b, cur) {
   return { id, name: clip(b.name, 60).trim() || '名前のない型', items: cleanItems(b.items), sort: Math.round(Number(b.sort) || 0),
     created_at: (cur && cur.created_at) || isoOr(b.created_at, isoNow()), updated_at: isoNow() };

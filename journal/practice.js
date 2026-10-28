@@ -13,7 +13,7 @@
      （前のデータの minutes は消さずにそのまま持つ。新しく作る項目には入れない）
    使っている部品（index.html 側）：$, state, openDate, today, parseD, WD, hhmm, escapeHtml, toast, closeSide, renderList, layout, Outbox, pageRead
    ========================================================= */
-import { menuFromLines, isCalId } from './rules.mjs';
+import { menuFromLines, isCalId, arcParts, arcPhotos, arcPlain } from './rules.mjs';
 const CLOUD = !!(window.JR && window.JR.cloud);
 const esc = (s) => escapeHtml(String(s ?? ''));
 const isoNow = () => new Date().toISOString();
@@ -404,7 +404,7 @@ let arcRows = [];
 async function renderArcList() {
   const box = $('arcList'); if (!box) return;
   arcRows = await Outbox.list('archive', 'api/archive', () => false, 'notion_id');
-  box.innerHTML = arcRows.length ? arcRows.map((a) => `<button class="pg" data-arc="${esc(a.notion_id)}">📦 ${a.date ? a.date.replace(/-/g, '/').replace(/\/0/g, '/') : '日付なし'} ${esc(a.title)}<small>${a.hasMenu ? '📋' : ''}</small></button>`).join('')
+  box.innerHTML = arcRows.length ? arcRows.map((a) => `<button class="pg" data-arc="${esc(a.notion_id)}">📦 ${a.date ? a.date.replace(/-/g, '/').replace(/\/0/g, '/') : '日付なし'} ${esc(a.title)}<small>${a.photos ? '📷' : ''}${a.hasMenu ? '📋' : ''}</small></button>`).join('')
     : '<div class="rv-empty">まだありません（引っ越しの道具はこれから）</div>';
 }
 async function openArchive(id) {
@@ -412,20 +412,50 @@ async function openArchive(id) {
   if (!a) return toast('読みこめませんでした');
   TP = { kind: 'arc', row: a };
   tov.hidden = false; document.body.classList.add('rv-open');
-  const tags = Object.entries(a.props || {}).filter(([, v]) => v !== '' && v != null).map(([k, v]) => `<span class="chip">${esc(k)}：${esc(Array.isArray(v) ? v.join('・') : v)}</span>`).join(' ');
+  // 上には日付と「練習メニュー」くらい（Notion の項目名は出さない）。写真の印のところに写真を出す
+  const kind = a.props && typeof a.props.kind === 'string' && a.props.kind ? `<span class="chip">${esc(a.props.kind)}</span>` : '';
+  const nPh = arcPhotos(a).length;
+  const block = (t) => arcParts(t).map((p) => p.photo
+    ? (CLOUD ? `<button class="ar-ph" data-ph="${esc(p.photo)}" title="押すと大きく見られます"><span class="ar-ph-wait">📷 写真を読みこみ中…</span></button>`
+      : '<div class="ar-ph ar-ph-none">📷 写真（公開版で見られます）</div>')
+    : `<p class="ar-pre">${esc(p.text)}</p>`).join('');
   tov.innerHTML = `<div class="rv glass">
     <div class="rv-head"><b>📦 昔の記録</b><span class="chip">Notion から</span><span class="rv-save">見るだけ</span><button class="ib" data-act="close" title="閉じる">✕</button></div>
     <div class="rv-body"><div class="rv-sum">
-      <div class="rv-sum-top">${ylabel(a.date)} ${tags}</div>
+      <div class="rv-sum-top">${ylabel(a.date)} ${kind}${nPh ? ` <span class="chip">📷 ${nPh}枚</span>` : ''}</div>
       <section><p class="big">${esc(a.title || '（題なし）')}</p></section>
-      ${a.menu ? `<section><h4>📋 メニュー</h4><p class="ar-pre">${esc(a.menu)}</p></section>` : ''}
-      ${a.body ? `<section><h4>📝 メモ</h4><p class="ar-pre">${esc(a.body)}</p></section>` : ''}
+      ${a.menu ? `<section><h4>📋 メニュー</h4>${block(a.menu)}</section>` : ''}
+      ${a.body ? `<section><h4>📝 メモ</h4>${block(a.body)}</section>` : ''}
     </div></div>
-    <div class="rv-foot">${a.menu ? '<button class="btn" data-act="arc-use">📋 このメニューを今日に使う</button>' : '<span></span>'}<button class="btn sub" data-act="close">閉じる</button></div></div>`;
+    <div class="rv-foot">${arcPlain(a.menu) ? '<button class="btn" data-act="arc-use">📋 このメニューを今日に使う</button>' : '<span></span>'}<button class="btn sub" data-act="close">閉じる</button></div></div>`;
+  if (CLOUD) loadArcPhotos(tov);
 }
+// 写真：jr-files の鍵つきの棚から、1時間だけ見られる URL を作って出す（本人の {uid}/ の下）
+async function loadArcPhotos(box) {
+  let uid = '';
+  try { uid = (await window.JR.ready()).uid; } catch {}
+  for (const b of box.querySelectorAll('.ar-ph[data-ph]')) {
+    try {
+      const url = await window.JR.files.url(`${uid}/${b.dataset.ph}`, 3600);
+      // loading='lazy' にしない（画面に出す前に読みこみを待つので、lazy だといつまでも読まれない）
+      const img = new Image(); img.alt = '写真'; img.decoding = 'async';
+      img.onload = () => { b.replaceChildren(img); b.dataset.url = url; };
+      img.onerror = () => { b.innerHTML = '<span class="ar-ph-wait">📷 写真を読みこめませんでした</span>'; };
+      img.src = url;
+    } catch { b.innerHTML = '<span class="ar-ph-wait">📷 写真を読みこめませんでした（電波を確かめてください）</span>'; }
+  }
+}
+// 押すと大きく見る（もう一度押すか ✕ で閉じる。2本指で拡大できる）
+function showPhoto(url) {
+  const v = document.createElement('div'); v.className = 'ph-view'; v.setAttribute('role', 'dialog');
+  v.innerHTML = `<img alt="写真" src="${esc(url)}"><button class="ib" title="閉じる">✕</button>`;
+  v.addEventListener('click', () => v.remove());
+  document.body.appendChild(v);
+}
+tov.addEventListener('click', (e) => { const b = e.target.closest('.ar-ph[data-url]'); if (b) { e.stopPropagation(); showPhoto(b.dataset.url); } });
 // 昔のメニューの文 → 項目（1行 = 1つ。名前だけ。「15分」なども名前にそのまま残す）
 function menuFromText(text) {
-  return String(text || '').split('\n').map((l) => l.replace(/^\s*(?:[-*・●○◦]|\d{1,2}[.)．、])\s*/, '').trim()).filter(Boolean).slice(0, 60)
+  return arcPlain(text).split('\n').map((l) => l.replace(/^\s*(?:[-*・●○◦]|\d{1,2}[.)．、])\s*/, '').trim()).filter(Boolean).slice(0, 60)
     .map((l) => ({ name: l.slice(0, 120), note: '' }));
 }
 async function arcAct(act) {
@@ -458,6 +488,7 @@ $('tabbar').addEventListener('click', async (e) => {
   side.classList.toggle('only-search', t === 'search');
   side.classList.add('open'); $('scrim').classList.add('show');
   if (t === 'search') setTimeout(() => $('q').focus(), 60);
+  if (t === 'rec') renderArcList();   // 昔の記録は開くたびに読み直す（アプリを開いたあとで入った分も出す）
 });
 
 /* ---------- 起動 ---------- */

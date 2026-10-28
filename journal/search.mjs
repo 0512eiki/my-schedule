@@ -50,6 +50,7 @@ const STEP = { where: 0, good: 1, bad: 2, feel: 3, fix: 4 };
 
 // pages: 日誌のページの配列、reviews: 試合の反省の配列 → 見つかったものの配列（新しい日付から）
 // menus / reflections / archive（10/27 追加）：練習メニュー・振り返り・昔の記録（Notion から）
+const noPhoto = (t) => String(t || '').replace(/^\s*\[\[写真:[^\]]*\]\]\s*$/gm, '');   // 昔の記録の写真の印は、さがす文に入れない
 export function search(q, pages, reviews, { limit = 60, menus = [], reflections = [], archive = [] } = {}) {
   const ts = terms(q);
   if (!ts.length) return [];
@@ -116,8 +117,8 @@ export function search(q, pages, reviews, { limit = 60, menus = [], reflections 
   for (const a of archive) {
     const fields = [
       { field: 'title', label: '📦 題', text: a.title },
-      { field: 'menu', label: '📦 メニュー', text: a.menu },
-      { field: 'body', label: '📦 メモ', text: a.body },
+      { field: 'menu', label: '📦 メニュー', text: noPhoto(a.menu) },
+      { field: 'body', label: '📦 メモ', text: noPhoto(a.body) },
     ].filter((f) => f.text);
     if (!fields.length || !allIn(fields.map((f) => f.text))) continue;
     for (const f of fields) {
