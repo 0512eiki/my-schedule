@@ -98,7 +98,8 @@ function itemsHTML(items) {
   if (!items.length) return '<div class="mn-empty">まだ項目がありません。「＋ 足す」で入れます</div>';
   return items.map((it, i) => `<div class="mi" data-i="${i}">
     <input class="nm" data-f="name" value="${esc(it.name)}" placeholder="例：打ち込み（背負い）" maxlength="120">
-    <input class="note" data-f="note" value="${esc(it.note)}" placeholder="メモ（なくてもOK）" maxlength="500">
+    <input type="hidden" class="note" data-f="note" value="${esc(it.note)}">
+    <button type="button" class="note-btn${it.note ? '' : ' empty'}">${it.note ? esc(it.note) : 'メモ（なくてもOK）'}</button>
     <span class="ops"><button class="ib sm" data-act="up" title="上へ" ${i === 0 ? 'disabled' : ''}>↑</button><button class="ib sm" data-act="down" title="下へ" ${i === items.length - 1 ? 'disabled' : ''}>↓</button><button class="ib sm" data-act="rm" title="この項目を消す">✕</button></span>
   </div>`).join('');
 }
@@ -109,8 +110,36 @@ function itemInput(items, t) {
   const it = items[+row.dataset.i]; if (!it) return false;
   if (t.dataset.f !== 'name' && t.dataset.f !== 'note') return false;
   it[t.dataset.f] = t.value;
+  if (t.dataset.f === 'note') showNote(row.querySelector('.note-btn'), t.value);
   return true;
 }
+// メモは押すと大きな入力画面が出る（全文が見える・10/27 本人の希望）。一覧では全文を折り返して出す
+function showNote(b, v) {
+  if (!b) return;
+  b.textContent = v || 'メモ（なくてもOK）'; b.classList.toggle('empty', !v);
+}
+const nov = document.createElement('div');
+nov.className = 'rv-ov note-ov'; nov.hidden = true;
+nov.innerHTML = '<div class="glass note-pop"><div class="note-head"><b class="note-ttl"></b><button type="button" class="btn note-done">完了</button></div><textarea class="note-tx" maxlength="500" placeholder="メモ（なくてもOK）"></textarea></div>';
+document.body.appendChild(nov);
+const ntx = nov.querySelector('.note-tx');
+let noteIn = null;   // いま直しているメモ（項目の hidden の欄）
+function openNote(b) {
+  const row = b.closest('.mi'); noteIn = row.querySelector('input.note');
+  nov.querySelector('.note-ttl').textContent = (row.querySelector('.nm').value || '').trim() || 'メモ';
+  ntx.value = noteIn.value; nov.hidden = false;
+  ntx.focus(); ntx.setSelectionRange(ntx.value.length, ntx.value.length);
+}
+function closeNote() { nov.hidden = true; noteIn = null; ntx.blur(); }
+// 打つたびに項目へ（いつもの保存の流れにのせる）
+ntx.addEventListener('input', () => { if (!noteIn) return; noteIn.value = ntx.value; noteIn.dispatchEvent(new Event('input', { bubbles: true })); });
+nov.querySelector('.note-done').addEventListener('click', closeNote);
+nov.addEventListener('click', (e) => { if (e.target === nov) closeNote(); });
+document.addEventListener('keydown', (e) => { if (!nov.hidden && e.key === 'Escape') closeNote(); });
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('.mi .note-btn'); if (!b) return;
+  e.preventDefault(); e.stopPropagation(); openNote(b);
+}, true);
 // 足す・消す・並べかえ → true なら描き直す
 function itemAct(items, act, i) {
   if (act === 'add-item') { items.push({ name: '', note: '' }); return true; }
