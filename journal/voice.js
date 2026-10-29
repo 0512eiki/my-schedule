@@ -32,9 +32,16 @@
   };
 
   const log = (...a) => { try { console.debug('[voice]', ...a); } catch {} };
+  // 10/29 本人「記録するところでボタン同士が邪魔をして押しづらい」→ 声のパネルが出ている間は、下にパネルの分のすき間を空ける
+  function shown(on) {
+    box.classList.toggle('show', on);
+    document.body.classList.toggle('voice-open', on);
+    if (on) requestAnimationFrame(() => document.body.style.setProperty('--voice-h', box.offsetHeight + 'px'));
+  }
   function setUI(mode, msg) {
     V.mode = mode;
-    box.classList.add('show');
+    clearTimeout(V.hideAt);
+    shown(true);
     box.classList.toggle('rec', mode === 'listening');
     box.classList.toggle('paused', mode === 'paused');
     stateEl.textContent = { starting: 'マイク準備中…', listening: '● 聞いています', paused: '一時停止中', finishing: '文字にしています…', idle: '待機中' }[mode];
@@ -161,7 +168,7 @@
     msgEl.dataset.label = opts.label || '';
     msgEl.dataset.done = opts.done || '';                     // 文字にした後の一言（振り返りなど、欄ごとに変える）
     if (!SR) {
-      box.classList.add('show'); setUI('idle', 'この端末のブラウザは声入力に対応していません。キーボードの🎤を使ってください。');
+      setUI('idle', 'この端末のブラウザは声入力に対応していません。キーボードの🎤を使ってください。');
       el('addText').focus(); return;
     }
     if (V.mode !== 'idle') return;
@@ -195,6 +202,8 @@
     V.committed = '';
     if (txt) putText(txt, true);
     setUI('idle', txt ? msgEl.dataset.done || (V.target && V.target.id !== 'addText' ? '答えの欄に入れました。直してから「次へ」へ。' : '書き足す欄に入れました。直してから「追加」を押してください。') : '文字になりませんでした。');
+    // 文字にし終わったら、少し見せてからパネルを閉じる（下の「これでOK」などのボタンにかぶらないように）
+    if (txt) V.hideAt = setTimeout(() => { if (V.mode === 'idle') shown(false); }, 2500);
   }
   // 文字を欄に入れて、input イベントを出す（試合の反省などが自動保存できるように）
   function putText(txt, focus) {
@@ -207,7 +216,7 @@
   function cancel() {
     dropRec(true); clearInterval(V.timer); keepAwake(false);
     V.committed = ''; V.session = ''; V.interim = '';
-    setUI('idle', ''); box.classList.remove('show');
+    setUI('idle', ''); shown(false);
   }
   function giveUp(msg) {
     commitSession(); const kept = V.committed;

@@ -116,6 +116,7 @@ button{cursor:pointer}
 /* 声入力 */
 .voice{display:none;position:fixed;z-index:70;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));width:min(600px,94vw);padding:12px 14px;border-radius:18px;background:rgba(255,255,255,.92);border:1px solid var(--glass-bd);box-shadow:0 14px 40px rgba(30,40,90,.25);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);font-size:13px;gap:10px;align-items:center;flex-wrap:wrap}
 .voice.show{display:flex}
+body.voice-open .main{padding-bottom:calc(var(--voice-h,140px) + 40px)}   /* 声のパネルの下にボタンが隠れないように（10/29） */
 .vdot{width:10px;height:10px;border-radius:50%;background:var(--faint)}
 .voice.rec .vdot{background:var(--bad);animation:blink 1s infinite}
 .voice.paused .vdot{background:var(--warn)}
@@ -337,6 +338,7 @@ body:not([data-view=ink]) .v-ink,body:not([data-view=menu]) .v-menu,body:not([da
   .tabbar button i{display:block;font-style:normal;font-size:19px}
   .tabbar button.on{color:var(--acc);font-weight:700}
   .main{padding-bottom:96px}
+  body.voice-open .main{padding-bottom:calc(var(--voice-h,140px) + 110px)}
   .side{bottom:calc(80px + env(safe-area-inset-bottom))}
   .side.only-search #sideNormal,.side.only-search .lock{display:none}
   .side.only-search .sr-tip{display:block}
