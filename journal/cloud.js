@@ -26,6 +26,15 @@
     return fetch(url, { ...opts, signal: c.signal }).finally(() => clearTimeout(tm));
   }
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: AUTH_KEY }, global: { fetch: fetchT } });
+  // 何が起きたかの控え（柔道ノートと同じ client_errors。声の不具合などをあとで調べるため。中身の文字は入れない・1回の起動で20件まで）
+  let logN = 0; const logSeen = new Set();
+  window.JRLog = (kind, msg) => {
+    try {
+      const key = kind + '|' + String(msg).slice(0, 120); if (logN >= 20 || logSeen.has(key)) return; logSeen.add(key); logN++;
+      const standalone = window.matchMedia && matchMedia('(display-mode: standalone)').matches ? 'home' : 'browser';
+      sb.from('client_errors').insert({ kind: String(kind).slice(0, 40), msg: String(msg).slice(0, 800), place: ('journal/' + standalone).slice(0, 120), ua: navigator.userAgent.slice(0, 300) }).then(() => {}, () => {});
+    } catch {}
+  };
   const mods = Promise.all([import('./rules.mjs'), import('./search.mjs')]).then(([rules, s]) => ({ ...rules, search: s.search }));
 
   /* ---------- 端末の中の控え（IndexedDB。手書きは大きいので localStorage ではなくこちら） ---------- */

@@ -157,6 +157,8 @@ box.addEventListener('click', (e) => {
   const act = b.dataset.act;
   if (act === 'mic') return;                 // pointerdown で始める（下）
   if (act === 'talk-done') {
+    // 声で聞いている途中に押した → 最後の文字まで欄に入れてから、まとめる（10/29：前は声の文字が欄に入る前にまとめようとしていた）
+    if (window.JournalVoice && window.JournalVoice.state().mode !== 'idle' && !b.dataset.waited) { b.dataset.waited = '1'; window.JournalVoice.finishNow().then(() => { b.click(); delete b.dataset.waited; }); return; }
     if (adding) {
       const t = addText.trim();
       if (t) { R.said = (R.said.trim() ? R.said.trim() + '\n' : '') + t; R.points.push(...toPoints(t)); }

@@ -120,6 +120,10 @@ body.voice-open .main{padding-bottom:calc(var(--voice-h,140px) + 40px)}   /* 声
 .vdot{width:10px;height:10px;border-radius:50%;background:var(--faint)}
 .voice.rec .vdot{background:var(--bad);animation:blink 1s infinite}
 .voice.paused .vdot{background:var(--warn)}
+.voice.vwarn .vmsg,.voice.vbad .vmsg{font-size:15px;font-weight:800;line-height:1.5}   /* 声が届いていない・入っていない時ははっきり（10/29） */
+.voice.vwarn{border:2px solid var(--warn)}
+.voice.vbad{border:2px solid var(--bad)}
+.voice.vbad .vmsg{color:var(--bad)}
 @keyframes blink{50%{opacity:.25}}
 .vtime{font-variant-numeric:tabular-nums;color:var(--dim)}
 .vmsg{flex-basis:100%;color:var(--dim);font-size:12px}
