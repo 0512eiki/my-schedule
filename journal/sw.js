@@ -2,10 +2,10 @@
 // ・範囲は /my-schedule/journal/ だけ（My schedule の sw.js とは別。My schedule の画面・通知には触らない）
 // ・画面のファイルは「まずネット → だめなら端末の控え」（直した分がすぐ届くように）。Supabase の部品（版の決まった CDN）は控えを先に使う
 // ・Supabase とのやりとり（データ）はここでは扱わない（cloud.js と outbox.js が受け持つ）
-const VERSION = 'jr-466a29e690';
+const VERSION = 'jr-a3b52366f1';
 const CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.min.js';
 const FILES = ['./', 'index.html', 'cloud.js', 'rules.mjs', 'search.mjs', 'review-parse.mjs', 'reader.js', 'voice.js', 'search-ui.js', 'outbox.js',
-  'review.js', 'practice.js', 'reflect.js', 'records.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png'];
+  'review.js', 'practice.js', 'reflect.js', 'records.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
@@ -42,5 +42,23 @@ self.addEventListener('fetch', (e) => {
       const key = req.mode === 'navigate' ? 'index.html' : url.pathname.slice(scopePath.length) || './';
       return (await c.match(key)) || (await c.match(req, { ignoreSearch: true })) || Response.error();
     }
+  })());
+});
+
+// 🔔 練習のあとの通知（本部が送る。中身 {title, body, url, tag}）→ 押すと柔道日誌のこの画面で ?date=…&tab=reflect を開く
+self.addEventListener('push', (e) => {
+  let d = {}; try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || '柔道日誌', {
+    body: d.body || '', tag: d.tag || 'judo-journal', icon: 'icon-192.png', badge: 'icon-192.png', data: { url: d.url || './' },
+  }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+  e.waitUntil((async () => {
+    const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const mine = list.find((c) => c.url.startsWith(self.registration.scope));
+    if (mine) { try { await mine.focus(); } catch {} try { return await mine.navigate(url); } catch { mine.postMessage({ type: 'jr-open', url }); return; } }
+    return self.clients.openWindow(url);
   })());
 });

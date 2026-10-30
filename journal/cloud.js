@@ -143,6 +143,41 @@ body.jr-locked{overflow:hidden}
   }
   document.addEventListener('click', (e) => { if (e.target.closest('#jrLogout')) logout(); });
 
+  /* ---------- 🔔 練習のあとの通知（10/29 本人が C：通知は柔道日誌のアプリから出す）----------
+     この端末の通知の宛先を jr_push に入れる → 本部が練習の15〜20分後にここへ送る → 押すと柔道日誌のアプリで振り返りが開く
+     iPhone は、ホーム画面に追加した柔道日誌から開いた時だけ通知を受けられる */
+  const PUSH_KEY = 'BBUqyBZ6I7GbeUH4m53lmuLcbO9Lqz6qzsbBxnxtNeMHr2ef9l1PXyWLAC8KdgKfPpYnhhHG25bJicYls828qe0';
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  const b64u = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, (c) => c.charCodeAt(0)); };
+  const say = (m) => (typeof toast === 'function' ? toast(m) : alert(m));
+  function pushLabel(on) { const b = document.getElementById('jrPush'); if (b) b.textContent = on ? '🔔 練習のあとの通知：オン' : '🔔 練習のあとの通知をオンにする'; }
+  async function pushState() {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || Notification.permission !== 'granted') return pushLabel(false);
+      const reg = await navigator.serviceWorker.getRegistration(); const sub = reg && await reg.pushManager.getSubscription();
+      pushLabel(!!sub);
+    } catch { pushLabel(false); }
+  }
+  async function pushOn() {
+    if (isIOS && !standalone()) return say('iPhone は、ホーム画面に追加した柔道日誌から開いた時だけ、通知をオンにできます');
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return say('この端末・ブラウザでは通知が使えません');
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return say('通知が許可されませんでした（設定 → 通知 から変えられます）');
+      const reg = await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(PUSH_KEY) });
+      const j = sub.toJSON();
+      const { error } = await sb.from('jr_push').upsert({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, device: (isIOS ? 'iPhone/iPad ' : '') + (standalone() ? 'ホーム画面' : 'ブラウザ') }, { onConflict: 'owner,endpoint' });
+      if (error) throw error;
+      pushLabel(true); say('🔔 通知をオンにしました。練習のあと「今日の練習どうだった？」が届きます');
+    } catch (e) { say('通知をオンにできませんでした（電波を確かめて、もう一度）'); }
+  }
+  document.addEventListener('click', (e) => { if (e.target.closest('#jrPush')) pushOn(); });
+  ready.then(pushState);
+  // 通知を押した時、この画面へ移れなかった時の控え（sw.js から）
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'jr-open' && typeof e.data.url === 'string' && e.data.url.startsWith(location.origin)) location.href = e.data.url; });
+
   /* ---------- Supabase への出し入れ ---------- */
   class Offline extends Error {}
   class Bad extends Error {}
