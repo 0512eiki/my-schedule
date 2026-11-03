@@ -129,14 +129,23 @@ document.body.appendChild(nov);
 const ntx = nov.querySelector('.note-tx');
 let noteIn = null;   // いま直しているメモ（項目の hidden の欄）
 let composing = false;   // 日本語の変換の途中（この間は保存しない。途中で触ると変換の候補が出ずにひらがなで確定してしまう）
-// iPhone のキーボードが出ても、入力画面が見えている所にぴったり入るように
+// iPhone のキーボードが出ても、入力画面が見えている所に入るように
+// 11/3 本人「メモを押すと画面が真っ白になってフリーズする」：前は見えている所が動くたび（scroll）に入力画面も動かしていた
+//   → 入力画面が動く → Safari が文字の場所を見せようとまた動かす → … の追いかけっこで固まることがある
+//   → 入力画面は画面の上にくっつけたまま動かさず、高さだけを、キーボードが出た・引っこんだ時（resize）に合わせる（1コマに1回・変わった時だけ）
 const vv = window.visualViewport;
+let fitRaf = 0, fitH = -1;
 function fitNote() {
-  if (nov.hidden) return;
-  nov.style.top = (vv ? vv.offsetTop : 0) + 'px';
-  nov.style.height = (vv ? vv.height : innerHeight) + 'px';
+  if (nov.hidden || fitRaf) return;
+  fitRaf = requestAnimationFrame(() => {
+    fitRaf = 0;
+    if (nov.hidden) return;
+    const h = Math.round(vv ? vv.height : innerHeight);
+    if (Math.abs(h - fitH) < 2) return;
+    fitH = h; nov.style.height = h + 'px';
+  });
 }
-if (vv) { vv.addEventListener('resize', fitNote); vv.addEventListener('scroll', fitNote); }
+if (vv) vv.addEventListener('resize', fitNote);
 function pushNote() {
   if (!noteIn || noteIn.value === ntx.value) return;
   noteIn.value = ntx.value; noteIn.dispatchEvent(new Event('input', { bubbles: true }));
@@ -144,7 +153,7 @@ function pushNote() {
 function openNote(b) {
   const row = b.closest('.mi'); noteIn = row.querySelector('input.note');
   nov.querySelector('.note-ttl').textContent = (row.querySelector('.nm').value || '').trim() || 'メモ';
-  ntx.value = noteIn.value; nov.hidden = false; fitNote();
+  ntx.value = noteIn.value; nov.hidden = false; fitH = -1; fitNote();
   ntx.focus({ preventScroll: true }); ntx.setSelectionRange(ntx.value.length, ntx.value.length);
 }
 function closeNote() { composing = false; pushNote(); nov.hidden = true; noteIn = null; ntx.blur(); }

@@ -9,8 +9,9 @@
    使い方：inkGuard(紙の要素, () => 書いている途中か) */
 (function () {
   const PALM_R = 22;          // これより大きい接触は手のひら
-  const PEN_QUIET = 800;      // ペンを離してから指で動かせるまで（ms）
-  let lastPen = 0;
+  const PEN_QUIET = 1500;     // ペンを離してから指で動かせるまで（ms）。考えている間の手のひらで動かないように少し長め（11/3）
+  const HOLD_MS = 6000;       // ペンを離してから、紙の位置を押さえておく長さ（ms）
+  let lastPen = -1e9;          // まだペンを使っていない（開いた直後に「ペンのすぐあと」と見なさない）
 
   function scroller(el) {
     for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
@@ -28,9 +29,34 @@
     const penNow = () => (busy && busy()) || (performance.now() - lastPen < PEN_QUIET);
     const stopCoast = () => { if (coast) cancelAnimationFrame(coast); coast = 0; };
 
-    el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'pen') { lastPen = performance.now(); stopCoast(); pan = null; } }, true);
+    // 11/3：書いている間と離してから少しの間は、紙の画面の上の位置を押さえる。
+    // iPad の Safari は、上の方の物の高さが変わった時に（保存の文字・読み取った文字など）スクロールの位置を直してくれないので、紙が上下に動いて見える
+    let hold = null;
+    const holdStart = () => {
+      const sc = scroller(el);
+      if (!hold) { hold = { sc, top: el.getBoundingClientRect().top, st: sc.scrollTop, until: 0, raf: 0 }; }
+      hold.until = performance.now() + HOLD_MS;
+      if (!hold.raf) hold.raf = requestAnimationFrame(holdTick);
+    };
+    const holdStop = () => { if (hold) { cancelAnimationFrame(hold.raf); hold = null; } };
+    function holdTick(now) {
+      if (!hold) return;
+      // だれかがスクロールした（スクロールの位置そのものが変わった）→ その動きは本物なので、押さえるのをやめる
+      if (Math.abs(hold.sc.scrollTop - hold.st) > 1) { holdStop(); return; }
+      const d = el.getBoundingClientRect().top - hold.top;
+      if (Math.abs(d) >= 0.5) { hold.sc.scrollTop += d; hold.st = hold.sc.scrollTop; }   // 上の物の高さが変わってずれた分だけ戻す（見た目は動かない）
+      if (now > hold.until) { holdStop(); return; }
+      hold.raf = requestAnimationFrame(holdTick);
+    }
+    // 指でスクロールし始めたら押さえるのをやめる（紙の外・帯・一覧などで動かした時も）
+    const userScroll = () => holdStop();
+    window.addEventListener('wheel', userScroll, { passive: true });
+    document.addEventListener('touchstart', (e) => { if (![...e.touches].some((t) => t.touchType === 'stylus') && !el.contains(e.target)) holdStop(); }, { passive: true, capture: true });
+    window.JR_inkHold = { stop: holdStop, active: () => !!hold };
+
+    el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'pen') { lastPen = performance.now(); stopCoast(); pan = null; holdStart(); } }, true);
     el.addEventListener('pointermove', (e) => { if (e.pointerType === 'pen') lastPen = performance.now(); }, true);
-    el.addEventListener('pointerup', (e) => { if (e.pointerType === 'pen') lastPen = performance.now(); }, true);
+    el.addEventListener('pointerup', (e) => { if (e.pointerType === 'pen') { lastPen = performance.now(); holdStart(); } }, true);
 
     el.addEventListener('touchstart', (e) => {
       const ts = [...e.touches];
@@ -40,6 +66,7 @@
       if (ts.length !== 1 || penNow()) { pan = null; return; }
       const t = ts[0];
       if ((t.radiusX || 0) > PALM_R || (t.radiusY || 0) > PALM_R) { pan = null; return; }
+      holdStop();
       pan = { id: t.identifier, y: t.clientY, sc: scroller(el), v: 0, at: performance.now() };
     }, { passive: false });
 

@@ -74,7 +74,7 @@ button{cursor:pointer}
 
 /* 右：本文 */
 .main{display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:40px}
-.top{flex:none;position:sticky;top:0;z-index:5;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.top{flex:none;position:sticky;top:0;z-index:5;padding:10px 14px 15px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .nav{display:flex;gap:4px}
 .ib{width:40px;height:40px;border-radius:12px;border:1px solid var(--glass-bd);background:rgba(255,255,255,.6);display:grid;place-items:center;font-size:17px;padding:0}
 .ib:active{transform:scale(.96)}
@@ -83,7 +83,9 @@ button{cursor:pointer}
 .ttl{flex:1;min-width:180px}
 .ttl .d{font-family:var(--mincho);font-weight:700;font-size:20px;line-height:1.2}
 .ttl input{border:0;background:transparent;font-size:12.5px;color:var(--dim);padding:2px 0;width:100%;outline:none}
-.save{font-size:11.5px;white-space:nowrap;color:var(--faint)}
+/* 11/3 本人「ペンを離すと画面が動く」：保存の文字（保存待ち…→保存しました）の長さで上の帯の折り返しが変わり、紙が 23px 上下していた
+   → 保存の文字は帯の右下の角に重ねて出す（帯の高さ・並びに関係させない） */
+.save{position:absolute;right:16px;bottom:2px;font-size:10.5px;line-height:12px;white-space:nowrap;color:var(--faint);pointer-events:none}
 .save.ok{color:var(--good)} .save.err{color:var(--bad)} .save.busy{color:var(--dim)}
 .menu-btn{display:none}
 
@@ -273,7 +275,7 @@ body:not([data-view=ink]) .v-ink,body:not([data-view=menu]) .v-menu,body:not([da
 .mi .nm{grid-area:nm}
 .mi .note-btn{grid-area:note;min-height:34px;border-radius:10px;border:1px solid var(--line2);background:rgba(255,255,255,.55);padding:7px 10px;font-size:13px;line-height:1.5;color:var(--text);text-align:left;white-space:pre-wrap;word-break:break-word;min-width:0;width:100%}
 .mi .note-btn.empty{color:var(--faint)}
-.note-ov{z-index:60;inset:auto 0 auto 0;top:0;height:100%;display:flex;align-items:stretch;justify-content:center;padding:calc(10px + env(safe-area-inset-top)) 10px 10px}
+.note-ov{z-index:60;inset:auto 0 auto 0;top:0;height:100%;overscroll-behavior:contain;display:flex;align-items:stretch;justify-content:center;padding:calc(10px + env(safe-area-inset-top)) 10px 10px}
 .note-ov[hidden]{display:none}
 .note-pop{width:min(640px,100%);max-height:100%;padding:12px;display:flex;flex-direction:column;gap:10px;background:#fff;border-radius:18px;box-shadow:0 14px 40px rgba(30,40,90,.25)}
 .note-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none}
