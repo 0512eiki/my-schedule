@@ -278,6 +278,15 @@ body.jr-locked{overflow:hidden}
       }
     }
     if (path === '/api/read') return [501, { error: '読み取りは Mac（本部）が後でします' }];
+    // ---- 声の振り返りを整える（Edge Function jr-tidy。中身は保存しない・名前は関数の中で伏せてから AI へ）11/2 ----
+    if (path === '/api/tidy' && method === 'POST') {
+      let s = null; try { ({ data: { session: s } } = await sb.auth.getSession()); } catch {}
+      if (!s) throw new Auth('login');
+      let r;
+      try { r = await fetchT(`${SUPABASE_URL}/functions/v1/jr-tidy`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + s.access_token, apikey: SUPABASE_KEY }, body: JSON.stringify(body) }); }
+      catch (e) { throw new Offline(String(e.message || e)); }
+      return [r.status, await r.json().catch(() => ({ error: 'bad_reply' }))];
+    }
 
     // ---- 試合の反省 ----
     if (path === '/api/reviews' && method === 'GET') {

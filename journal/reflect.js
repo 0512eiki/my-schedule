@@ -34,6 +34,8 @@ const canMic = () => !!(window.SpeechRecognition || window.webkitSpeechRecogniti
   && (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname));
 
 let list = [], about = 'class', R = null, adding = false, addText = '', seq = 0, loading = Promise.resolve(), saveT = 0;
+// 11/2：保存する前に整える。tidy = { id, busy, points, err }（整えた文の案。まだ R には入れない）
+let tidy = null;
 
 async function load(d) {
   const my = ++seq;
@@ -44,9 +46,9 @@ async function load(d) {
   pick();
   if (Day.view === 'refl') render();
 }
-function pick() { const mine = list.filter((r) => r.about === about); R = mine[mine.length - 1] || null; adding = false; addText = ''; }
+function pick() { const mine = list.filter((r) => r.about === about); R = mine[mine.length - 1] || null; adding = false; addText = ''; tidy = null; }
 // まとめの上の一言（だれがまとめたか）
-const byLine = () => (R.status === 'summarized' ? '<span class="chip">本部の秘書がまとめました</span> ' : R.status === 'heard' ? '<span class="chip w">文で区切っただけ（本部の秘書があとでまとめます）</span> ' : '');
+const byLine = () => (R.status === 'summarized' ? '<span class="chip">✨ 整えた文（直せます）</span> ' : R.status === 'heard' ? '<span class="chip w">文で区切っただけ（本部の秘書があとで整えます）</span> ' : '');
 Day.on((why) => {
   if (why === 'date') loading = load(Day.date);
   else if (why === 'view' && Day.view === 'refl') render();
@@ -96,6 +98,38 @@ function warnText() {
 }
 function updateWarn() { const w = box.querySelector('.warnname'); if (w) w.innerHTML = warnText(); }
 
+/* ---------- 保存する前に整える（11/2 本人「聞き間違い・えっと・言い直しのまま保存されている」） ----------
+   「話し終わった」→ 話した言葉はすぐ保存（heard・文で区切っただけ）→ 整えた文の案を見せる →「OK」で保存／「直す」で直してから OK
+   整えるのは 公開版 = Supabase の関数 jr-tidy（Claude）／試作 = server.mjs の簡単な整え。名前らしい言葉は送る前に〇〇に伏せる
+   つながらない・整えられない時は、今まで通り「文で区切っただけ」（本部の秘書があとで整える） */
+async function startTidy(text, base) {
+  const row = R, my = { id: row.id, busy: true, base, points: null, err: '' };
+  tidy = my; render();
+  const menu = [...new Set(Day.menus.flatMap((m) => m.items.map((it) => it.name.trim())).filter(Boolean))];
+  try {
+    const r = await JR.fetch('api/tidy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ said: text, about: row.about, date: row.date, menu }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !Array.isArray(j.points) || !j.points.length) throw new Error(j.error || r.status);
+    my.points = [...base, ...j.points.map((p) => ({ text: String(p.text || '').trim(), next: !!p.next })).filter((p) => p.text)];
+  } catch (e) {
+    my.err = /fetch|network|offline/i.test(String(e.message)) ? 'つながらないので整えられませんでした' : '整えられませんでした';
+  }
+  my.busy = false;
+  if (tidy === my && R === row && Day.view === 'refl') render();
+}
+function tidyCard() {
+  const t = tidy;
+  if (t.busy) return `<section class="card glass rf rf-tidy"><h3>✨ 文章を整えています… <span class="rf-st"></span></h3>
+    <p class="rf-note">聞き間違い・「えっと」・言い直しを直して、句読点をつけます（中身は足さない・変えない）。話した言葉はもう保存してあります</p></section>`;
+  return `<section class="card glass rf rf-tidy">
+    <h3>✨ 整えた文 <span class="rf-st"></span></h3>
+    <div class="tidy-pts">${t.points.map((p) => `<p>${esc(p.text)}${p.next ? ' <span class="chip w">次へ</span>' : ''}</p>`).join('')}</div>
+    <div class="warnname">${warnText()}</div>
+    <div class="row"><button class="btn" data-act="tidy-ok">OK（これで保存）</button><button class="btn sub" data-act="tidy-fix">✏️ 直す</button></div>
+    <details class="rf-said-view" open><summary>話した言葉（もとの文・そのまま残します）</summary><p>${esc(R.said)}</p></details>
+  </section>`;
+}
+
 /* ---------- 画面 ---------- */
 function render() {
   if (!Day.date) return;
@@ -103,7 +137,9 @@ function render() {
   // まとめ（points）がまだない間は「話す」画面。文で区切ったまとめがあれば、status が heard でも、まとめを見せる
   const talking = !R || adding || (['memo', 'heard'].includes(R.status) && !R.points.length);
   let body;
-  if (talking) {
+  if (!talking && tidy && tidy.id === R.id && (tidy.busy || tidy.points)) {
+    body = tidyCard();
+  } else if (talking) {
     const menuNames = [...new Set(Day.menus.flatMap((m) => m.items.map((it) => it.name.trim())).filter(Boolean))];
     body = `<section class="card glass rf rf-talk">
       <h3>${adding ? '🎙 言い足す' : about === 'class' ? '💬 今日の練習、どうだった？' : '🥋 自分の稽古、どうだった？'} <span class="rf-st"></span></h3>
@@ -122,7 +158,7 @@ function render() {
       <button class="nx ${p.next ? 'on' : ''}" data-act="nx" aria-pressed="${p.next}" title="次の練習の日に出す">次へ</button><button class="ib sm" data-act="rm-pt" title="この文を消す">✕</button></div>`).join('');
     body = `<section class="card glass rf rf-sum">
       <h3>📝 ${about === 'class' ? '今日の振り返り' : '自分の稽古の振り返り'} <span class="rf-st"></span></h3>
-      <div class="rf-by">${byLine()}</div>
+      <div class="rf-by">${tidy && tidy.id === R.id && tidy.err ? `<span class="chip w">${esc(tidy.err)}（文で区切っただけ・本部の秘書があとで整えます）</span> ` : byLine()}</div>
       <div class="pts">${pts || '<div class="mn-empty">まとめる文がありませんでした。「言い足す」で話せます</div>'}</div>
       <div class="rf-note">${about === 'class' ? '<span class="chip w">次へ</span> の所は、次の練習の日のメニューの上に出ます（押して付け外し）。文は直せます' : '自分の稽古の振り返りは、次の日のメニューの上には出しません'}</div>
       <div class="warnname">${warnText()}</div>
@@ -159,21 +195,33 @@ box.addEventListener('click', (e) => {
   if (act === 'talk-done') {
     // 声で聞いている途中に押した → 最後の文字まで欄に入れてから、まとめる（10/29：前は声の文字が欄に入る前にまとめようとしていた）
     if (window.JournalVoice && window.JournalVoice.state().mode !== 'idle' && !b.dataset.waited) { b.dataset.waited = '1'; window.JournalVoice.finishNow().then(() => { b.click(); delete b.dataset.waited; }); return; }
+    let text = '', base = [];
     if (adding) {
       const t = addText.trim();
-      if (t) { R.said = (R.said.trim() ? R.said.trim() + '\n' : '') + t; R.points.push(...toPoints(t)); }
-      adding = false; addText = ''; R.status = 'heard';    // 言い足した分は、本部の秘書がまとめ直す（OK は外れる）
+      base = R.points.slice();
+      if (t) { R.said = (R.said.trim() ? R.said.trim() + '\n' : '') + t; R.points.push(...toPoints(t)); text = t; }
+      adding = false; addText = ''; R.status = 'heard';    // 言い足した分は、整えてから OK（今までのまとめはそのまま）
     } else {
       if (!R || !R.said.trim()) return toast('まだ何も話していません（打ってもOK）');
-      R.points = toPoints(R.said); R.status = 'heard';    // summarized は本部の秘書がまとめた時だけ
+      R.points = toPoints(R.said); R.status = 'heard';    // まずは文で区切っただけ（整えた文は下の startTidy）
       if (!R.points.length) return toast('まとめる文がありませんでした（もう少し話す・打つ）');
+      text = R.said;
     }
-    save(0); render(); box.querySelector('.rf')?.scrollIntoView({ block: 'nearest' }); return;
+    save(0);
+    if (text) startTidy(text, base); else render();
+    box.querySelector('.rf')?.scrollIntoView({ block: 'nearest' }); return;
   }
   if (act === 'add-cancel') { adding = false; addText = ''; render(); return; }
   if (!R) return;
   if (act === 'add') { adding = true; addText = ''; render(); box.querySelector('.rf-said')?.focus({ preventScroll: true }); return; }
   if (act === 'mask') { for (const n of names()) R.said = R.said.split(n).join('〇〇' + n.match(/(さん|くん|君|ちゃん|選手)$/)[0]); save(); render(); return; }
+  if (act === 'tidy-ok' || act === 'tidy-fix') {
+    if (!tidy || tidy.id !== R.id || !tidy.points) return;
+    R.points = tidy.points; tidy = null;
+    if (act === 'tidy-ok') { R.status = 'ok'; save(0); render(); toast('整えた文で保存しました'); }
+    else { R.status = 'summarized'; save(0); render(); box.querySelector('.pt textarea')?.focus({ preventScroll: true }); }   // 直してから「これでOK」
+    return;
+  }
   if (act === 'ok') { R.status = 'ok'; save(0); render(); toast('これでOK にしました'); return; }
   const i = +(b.closest('.pt')?.dataset.i ?? -1); if (i < 0) return;
   if (act === 'nx') { R.points[i].next = !R.points[i].next; b.classList.toggle('on', R.points[i].next); b.setAttribute('aria-pressed', R.points[i].next); save(); return; }
@@ -198,6 +246,7 @@ async function open(id) {
 // 画面に戻った時：本部の秘書のまとめが届いていれば読みこみ直す（打っている途中・保存待ちの時は読みこまない）
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !Day.date || saveT || adding || box.contains(document.activeElement)) return;
+  if (tidy && (tidy.busy || tidy.points)) return;   // 整えた文の案を見せている間は読みこみ直さない（案が消えるため）
   loading = load(Day.date);
 });
 if (Day.date) loading = load(Day.date);
