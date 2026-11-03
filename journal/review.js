@@ -46,7 +46,7 @@ class Pad {
         if ((x - lx) ** 2 + (y - ly) ** 2 < 0.6) continue;
         p.push(r1(x), r1(y), r2(this.pr(ev)));
       }
-      if (!this.cur.erase) this.draw(this.cur.s);
+      if (!this.cur.erase) this.drawSoon(this.cur.s);
     });
     const end = (e) => {
       if (!this.cur || e.pointerId !== this.cur.id) return;
@@ -55,8 +55,7 @@ class Pad {
       this.undo.push(this.ink.slice()); this.ink.push(cur.s); this.render(); this.onChange?.();
     };
     c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
-    c.addEventListener('touchstart', (e) => { if ([...e.touches].some((t) => t.touchType === 'stylus')) e.preventDefault(); }, { passive: false });
-    c.addEventListener('touchmove', (e) => { if (this.cur || [...e.touches].some((t) => t.touchType === 'stylus')) e.preventDefault(); }, { passive: false });
+    inkGuard(c, () => !!this.cur);   // 画面を動かさない（11/2・ink-guard.js）
   }
   pr(e) { return e.pointerType === 'pen' ? (e.pressure > 0 ? e.pressure : 0.5) : 0.5; }
   pt(e) { const r = this.c.getBoundingClientRect(); return [(e.clientX - r.left) / this.s, (e.clientY - r.top) / this.s]; }
@@ -76,6 +75,7 @@ class Pad {
     for (const s of this.ink) strokePath(x, s);
   }
   draw(s) { this.render(); strokePath(this.x, s); }
+  drawSoon(s) { if (this.raf) return; this.raf = requestAnimationFrame(() => { this.raf = 0; if (this.cur && this.cur.s === s) this.draw(s); }); }   // 1コマに1回だけ描く（遅れない）
   eraseAt(x, y) {
     let hit = false;
     for (let i = this.ink.length - 1; i >= 0; i--) {

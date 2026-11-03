@@ -44,7 +44,7 @@ html,body{margin:0;height:100%}
 /* iPhone で画面が左右に動かないように（10/27 本人「画面の左右が動いてしまうのがうざい」）
    ・横には動かさない（縦のスクロールと、ペンで書く所はそのまま）
    ・文字の欄を押した時に iPhone が勝手に拡大しないよう、スマホでは字を 16px 以上に（拡大すると左右に動くようになる） */
-html,body{overflow-x:hidden;overflow-x:clip;overscroll-behavior-x:none;max-width:100%;touch-action:manipulation}
+html,body{overflow-x:hidden;overflow-x:clip;overscroll-behavior:none;max-width:100%;touch-action:manipulation}   /* 11/2：上下の引っぱり（バウンス）もしない */
 *{touch-action:manipulation}   /* ダブルタップで拡大しない（中でスクロールする所も）。手書きの紙は下で pan-y */
 /* 10/28 本人「まだズームが起きたり横にずれる。ほかのアプリと同じように固定」→ iPad（横向きの広い画面も）でも 16px 以上に。
    拡大は viewport と下の gesture 止めで止める（上下のスクロールはそのまま） */
@@ -73,7 +73,7 @@ button{cursor:pointer}
 .lock{margin-top:auto;font-size:11px;color:var(--faint);padding:8px 6px 2px}
 
 /* 右：本文 */
-.main{display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding-bottom:40px}
+.main{display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:40px}
 .top{flex:none;position:sticky;top:0;z-index:5;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .nav{display:flex;gap:4px}
 .ib{width:40px;height:40px;border-radius:12px;border:1px solid var(--glass-bd);background:rgba(255,255,255,.6);display:grid;place-items:center;font-size:17px;padding:0}
@@ -94,9 +94,10 @@ button{cursor:pointer}
 .bgsel{height:40px;border-radius:12px;border:1px solid var(--glass-bd);background:rgba(255,255,255,.6);padding:0 10px;font-size:13px}
 
 .paperwrap{flex:none;position:relative;border-radius:16px;overflow:hidden;box-shadow:var(--shadow);background:var(--paper);
-  touch-action:pan-y; /* 指はスクロール、ペンは書く（2本指の拡大はしない） */
+  touch-action:none; /* 11/2：紙の上ではブラウザに画面を動かさせない。指1本のスクロールは ink-guard.js が自分で動かす */
+  overscroll-behavior:none;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.paperwrap canvas{position:absolute;left:0;top:0;display:block}
+.paperwrap canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
 .paperwrap.erasing{cursor:cell}
 .viewonly-note{font-size:12px;color:var(--dim);padding:0 4px}
 
@@ -191,7 +192,7 @@ body.voice-open .main{padding-bottom:calc(var(--voice-h,140px) + 40px)}   /* 声
 .rv-padbar{display:flex;align-items:center;gap:6px;margin:12px 0 6px;font-size:12px;color:var(--dim)}
 .rv-padbar span{margin-right:auto}
 .ib.sm{width:34px;height:34px;font-size:15px;border-radius:10px}
-.rv-pad{border-radius:14px;overflow:hidden;box-shadow:var(--shadow);touch-action:pan-y;-webkit-user-select:none;user-select:none}
+.rv-pad{border-radius:14px;overflow:hidden;box-shadow:var(--shadow);touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
 .rv-pad canvas{display:block}
 .rv-warn{font-size:12.5px;color:var(--warn);margin-top:8px}
 .rv-warn:empty{display:none}
@@ -572,6 +573,7 @@ details.fold>summary .fold-n{margin-left:auto;font-size:10.5px}
 window.JR = window.JR || { cloud: false, fetch: (u, o) => fetch(u, o) };
 </script>
 <script src="reader.js"></script>
+<script src="ink-guard.js"></script>
 <script>
 'use strict';
 /* =========================================================
@@ -839,8 +841,10 @@ function pressureOf(e){
   return 0.5;              // マウス
 }
 function canStart(e){
-  if(!state.canDraw || !state.page) return false;
-  if(e.pointerType==='pen'){ penSeen = true; return true; }
+  if(!state.page) return false;
+  // ペンなら iPad。iPad mini の縦（幅 744）は iPhone と同じ並びになるが、ペンでは書ける（11/2）
+  if(e.pointerType==='pen'){ penSeen = true; return true; }   // 「見るだけ」の注意はここで消さない（消すと紙が上にずれる）
+  if(!state.canDraw) return false;
   if(e.pointerType==='mouse') return e.button===0;
   return false;            // 指：書かない（スクロール・拡大に使う）
 }
@@ -867,6 +871,9 @@ paper.addEventListener('pointermove', e=>{
     if((x-lx)**2 + (y-ly)**2 < 0.6) continue;   // ほぼ同じ所の点は捨てる（データを小さく）
     p.push(r1(x), r1(y), r2(pressureOf(ev)));
   }
+  // 少し先の点（予測）は見せるだけ・保存しない → ペン先と線のずれが小さくなる（11/2）
+  const pe = e.getPredictedEvents ? e.getPredictedEvents() : [];
+  drawing.pred = pe.length ? pe.slice(0,2).flatMap(ev=>{ const [x,y]=toPage(ev); return [r1(x), r1(y), r2(pressureOf(ev))]; }) : null;
   requestLive();
 });
 function endStroke(e){
@@ -887,12 +894,11 @@ paper.addEventListener('pointercancel', endStroke);   // 途中で取り消さ�
 
 function requestLive(){
   if(liveRAF) return;
-  liveRAF = requestAnimationFrame(()=>{ liveRAF = 0; xLive.clearRect(0,0,W,H); if(drawing) strokePath(xLive, drawing.s); });
+  liveRAF = requestAnimationFrame(()=>{ liveRAF = 0; xLive.clearRect(0,0,W,H); if(drawing) strokePath(xLive, drawing.pred ? {...drawing.s, p: drawing.s.p.concat(drawing.pred)} : drawing.s); });
 }
 
-// iPad：ペンが触れた時だけ、画面のスクロールと「手書き文字入力（スクリブル）」を止める
-paper.addEventListener('touchstart', e=>{ if([...e.touches].some(t=>t.touchType==='stylus')) e.preventDefault(); }, {passive:false});
-paper.addEventListener('touchmove',  e=>{ if(drawing || erasing || [...e.touches].some(t=>t.touchType==='stylus')) e.preventDefault(); }, {passive:false});
+// iPad：紙の上では画面を動かさない（ペン・手のひら）。指1本の上下スクロールだけ ink-guard.js で（11/2）
+inkGuard(paper, ()=>!!(drawing || erasing));
 
 /* ---------- 消しゴム（線ごと消す） ---------- */
 function eraseAt(x,y){
