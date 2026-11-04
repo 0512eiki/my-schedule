@@ -79,7 +79,10 @@ function splitWhere(text) {
 export function findNameLike(text) {
   const out = new Set();
   for (const m of String(text || '').matchAll(/([一-龥々]{1,4}|[ァ-ヶー]{2,8}|[ぁ-ん]{2,4})(さん|くん|君|ちゃん|選手)/g)) {
-    if (!/^(選手|相手|自分|みんな|全員|先生|監督|コーチ|審判|先輩|後輩|お母|お父|親御)/.test(m[1])) out.add(m[0]);
+    if (/^(選手|相手|自分|みんな|全員|先生|監督|コーチ|審判|先輩|後輩|お母|お父|親御)/.test(m[1])) continue;
+    // 「行くんじゃなくて」の「くん」は名前ではない（tidy.mjs の isVerbKun と同じ見分け方・11/4）
+    if (m[2] === 'くん' && /^[一-龥]$/.test(m[1]) && /^(じゃ|だ(?!け)|です|でしょ|なら)/.test(m.input.slice(m.index + m[0].length))) continue;
+    out.add(m[0]);
   }
   return [...out];
 }
