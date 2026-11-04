@@ -107,10 +107,11 @@ async function startTidy(text, base) {
   tidy = my; render();
   const menu = [...new Set(Day.menus.flatMap((m) => m.items.map((it) => it.name.trim())).filter(Boolean))];
   try {
-    const r = await JR.fetch('api/tidy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ said: text, about: row.about, date: row.date, menu }) });
+    const r = await JR.fetch('api/tidy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ said: text, about: row.about, date: row.date, menu, before: base }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !Array.isArray(j.points) || !j.points.length) throw new Error(j.error || r.status);
-    my.points = [...base, ...j.points.map((p) => ({ text: String(p.text || '').trim(), next: !!p.next })).filter((p) => p.text)];
+    const got = j.points.map((p) => ({ text: String(p.text || '').trim(), next: !!p.next })).filter((p) => p.text);
+    my.points = j.merged ? got : [...base, ...got];   // merged = AI が今のまとめと合わせて全部を返した（試作の簡単な整えは足すだけ）
   } catch (e) {
     my.err = /fetch|network|offline/i.test(String(e.message)) ? 'つながらないので整えられませんでした' : '整えられませんでした';
   }
@@ -120,7 +121,7 @@ async function startTidy(text, base) {
 function tidyCard() {
   const t = tidy;
   if (t.busy) return `<section class="card glass rf rf-tidy"><h3>✨ 文章を整えています… <span class="rf-st"></span></h3>
-    <p class="rf-note">聞き間違い・「えっと」・言い直しを直して、句読点をつけます（中身は足さない・変えない）。話した言葉はもう保存してあります</p></section>`;
+    <p class="rf-note">くり返し・「えっと」・聞き間違いを直して、日記のように整えます（話していないことは足しません）。話した言葉はもう保存してあります</p></section>`;
   return `<section class="card glass rf rf-tidy">
     <h3>✨ 整えた文 <span class="rf-st"></span></h3>
     <div class="tidy-pts">${t.points.map((p) => `<p>${esc(p.text)}${p.next ? ' <span class="chip w">次へ</span>' : ''}</p>`).join('')}</div>
@@ -198,9 +199,11 @@ box.addEventListener('click', (e) => {
     let text = '', base = [];
     if (adding) {
       const t = addText.trim();
+      // 11/3：今のまとめ（本人が直した文）も一緒に送り、言い足した分と重なる所は1つにまとめた「全部」を返してもらう
+      //       （前は言い足した分だけ整えて後ろに足していたので、同じ話が重なっていた）
       base = R.points.slice();
       if (t) { R.said = (R.said.trim() ? R.said.trim() + '\n' : '') + t; R.points.push(...toPoints(t)); text = t; }
-      adding = false; addText = ''; R.status = 'heard';    // 言い足した分は、整えてから OK（今までのまとめはそのまま）
+      adding = false; addText = ''; R.status = 'heard';    // 言い足した分は、整えてから OK
     } else {
       if (!R || !R.said.trim()) return toast('まだ何も話していません（打ってもOK）');
       R.points = toPoints(R.said); R.status = 'heard';    // まずは文で区切っただけ（整えた文は下の startTidy）
