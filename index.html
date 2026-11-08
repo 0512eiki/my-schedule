@@ -1870,9 +1870,13 @@ document.addEventListener('click',e=>{
     case 'removeLesson':closeSheet();cancelForm(id,true);break;
     case 'cancelSave':cancelSave();break;
     case 'uncancel':{const l=byId(id);
-      if(l.cancel?.carry==='moved'){const t=byId(l.cancel.to);if(t&&t.from===l.id){if(t.pay.mode==='per'&&t.pay.paid&&l.pay.mode!=='per'){l.pay={...t.pay};t.pay=defaultPay(t.sid,1,t.dur)}t.from=null}}
-      if(l.pay.mode==='none')l.pay=defaultPay(l.sid,1,l.dur);
-      l.status='planned';l.cancel=null;run(()=>{save();closeSheet();render()},L('予定に戻しました','Back to scheduled'));break}
+      /* ペアは2人そろって戻す（1人だけ戻すと片方だけ「予定」・1人分の代金になっていた 11/6） */
+      const g=group(l), back=g.filter(x=>x.status==='cancelled'), n=g.length;
+      back.forEach(x=>{
+        if(x.cancel?.carry==='moved'){const t=byId(x.cancel.to);if(t&&t.from===x.id){if(t.pay.mode==='per'&&t.pay.paid&&x.pay.mode!=='per'){x.pay={...t.pay};t.pay=defaultPay(t.sid,1,t.dur)}t.from=null}}
+        if(x.pay.mode==='none')x.pay=defaultPay(x.sid,n,x.dur);
+        x.status='planned';x.cancel=null});
+      run(()=>{save();closeSheet();render()},n>1&&back.length>1?L(`${names(g)} を2人とも予定に戻しました`,`Both back to scheduled: ${names(g)}`):L('予定に戻しました','Back to scheduled'));break}
     case 'schedCarry':{const c=byId(id);closeSheet();eventForm({kind:'lesson',sid:c.sid,carry:c.id,date:addDays(today(),1),time:c.time});break}
     case 'csv':csvSheet(v);break;
     case 'dlCsv':{const blob=new Blob(['\ufeff'+g('csv-text').value],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(blob);const a2=document.createElement('a');a2.href=u;a2.download=b.dataset.name;document.body.appendChild(a2);a2.click();a2.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);toast(L('✓ 保存しました','✓ Saved'));break}
