@@ -739,7 +739,7 @@ function home(){
 /* 予定の一覧（レッスン＋柔道の予定） */
 function itemsOn(date,filter=UI.filter){
   const out=[];
-  if(filter!=='event')dedupe(sortL(S.lessons.filter(l=>l.date===date))).forEach(l=>out.push({kind:'lesson',o:l,allDay:false,start:toMin(l.time),end:toMin(l.time)+l.dur,label:shortName(names(group(l))),cls:stateOf(l)}));
+  if(filter!=='event')dedupe(sortL(S.lessons.filter(l=>l.date===date&&group(l).some(x=>x.status!=='cancelled')))).forEach(l=>out.push({kind:'lesson',o:l,allDay:false,start:toMin(l.time),end:toMin(l.time)+l.dur,label:shortName(names(group(l))),cls:stateOf(l)}));
   if(filter!=='lesson')S.events.filter(e=>e.date===date||(e.allDay&&e.edate&&e.date<=date&&date<=e.edate)).forEach(e=>out.push({kind:'event',o:e,allDay:e.allDay,start:e.allDay?-1:toMin(e.time),end:e.allDay?-1:toMin(e.time)+e.dur,label:e.title,cls:'evt',c:evtColor(e.type)}));
   return out.sort((a,b)=>a.start-b.start);
 }
