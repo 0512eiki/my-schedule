@@ -1477,7 +1477,7 @@ function clashForm(evIds){
     <div class="chips" style="margin-bottom:8px"><button class="chip" data-act="clashAll" data-v="1">${L('すべて選択','Select all')}</button><button class="chip" data-act="clashAll" data-v="0">${L('すべて外す','Select none')}</button></div>
     ${list.map(({e,ls})=>`<div class="fld"><span class="lb"><span class="pill evt" style="--c:${evtColor(e.type)}">${evtName(e.type)}</span> ${dl(e.date)}${e.edate?'〜'+md(e.edate):''} ${e.allDay?L('終日','all day'):`${e.time}–${fromMin(toMin(e.time)+e.dur)}`} ${esc(e.title)}</span>
       ${ls.map(l=>`<label class="todo" style="cursor:pointer"><input type="checkbox" class="cl-pick" data-k="${e.id}|${l.id}" checked><span class="tx"><b>${md(l.date)} ${l.time}–${fromMin(toMin(l.time)+l.dur)}</b> ${esc(names(group(l)))}${l.pay.mode==='per'&&l.pay.paid?` <span class="hint">${L('前払い済み','prepaid')}</span>`:''}</span></label>`).join('')}</div>`).join('')}
-    <p class="hint">${L(`「${nm}を優先」にすると、チェックしたレッスンを「予定変更（${nm}と重なった）」にして、内容と代金を次の予定に繰り越します。チェックを外したレッスンは残します。`,`“${nm} first” marks the checked lessons as rescheduled (clashed with the ${nm}) and carries over their plan and payment. Unchecked lessons stay.`)}</p>
+    <p class="hint">${L(`「${nm}を優先」にすると、チェックしたレッスンを「予定変更（${nm}と重なった）」にします（繰り越さない。前払い分だけ振替待ちに残します）。チェックを外したレッスンは残します。`,`“${nm} first” marks the checked lessons as rescheduled (clashed with the ${nm}); nothing carries over except prepaid ones (kept as pending make-ups). Unchecked lessons stay.`)}</p>
     <div class="foot"><button class="btn block danger" data-act="clashEvent" id="cl-btn" style="background:var(--due);color:var(--card)">${clashBtnLabel(nm,F.clash.sel.size)}</button>
       <button class="btn block ghost" data-act="clashLesson">${L('レッスンを優先する（どちらも残す）','Lessons first (keep both)')}</button></div>`);
   F.clash.nm=nm;
@@ -1486,7 +1486,7 @@ const clashBtnLabel=(nm,n)=>L(`${nm}を優先：チェックした ${n}件のレ
 function rescheduleLessons(ls,ev){
   const all=ls.flatMap(group).filter(l=>l.status==='planned'), ids=all.map(l=>l.id);
   all.forEach(c=>{c.status='cancelled';c.cancel={reason:'こちらの都合',by:'coach',conflict:ev?{id:ev.id,title:ev.title,type:ev.type}:null,on:today(),carry:'none'};
-    const t=nextPlanned(c,ids);if(t)moveTo(c,t);else c.cancel.carry='pending'});
+    if(c.pay.mode==='per'&&c.pay.paid)c.cancel.carry='pending';else c.pay={mode:'none'}});   // 11/8：繰り越さない（前払い分だけ振替待ちに残す）
   return {moved:dedupe(all.filter(l=>l.cancel.carry==='moved')).length,pending:dedupe(all.filter(l=>l.cancel.carry==='pending')).length};
 }
 function clashResolve(eventFirst){
@@ -1520,7 +1520,7 @@ function skipDayForm(date){
     <div class="fld">${its.map(it=>{const o=it.o;const nm=it.kind==='lesson'?names(group(o)):o.title;return `<label class="todo" style="cursor:pointer"><input type="checkbox" class="sk-pick" data-id="${o.id}" ${F.skip.sel.has(o.id)?'checked':''}><span class="tx"><b>${it.allDay?L('終日','All day'):o.time}</b> ${esc(nm)}${it.kind==='lesson'?` <span class="hint">${L('プライベート','private')}${o.pay.mode==='per'&&o.pay.paid?L('・前払い済み',' · prepaid'):''}</span>`:` <span class="pill evt" style="--c:${it.c}">${evtName(o.type)}</span>`}${o.seriesId?' <span class="hint">↻</span>':''}</span></label>`}).join('')}</div>
     ${hasL?`<div class="fld"><span class="lb">${L('理由','Reason')}</span><div class="chips">${['こちらの都合','体調不良','その他'].map(r=>`<button class="chip" data-act="skReason" data-v="${r}" aria-pressed="${r===F.skip.reason}">${tReason(r)}</button>`).join('')}</div>
       <div id="sk-conf" style="margin-top:8px">${conflictChips(date,F.skip.conf)}</div>
-      <p class="hint" style="margin:8px 0 0">${L('プライベートレッスンは「予定変更」として残し、やる予定だった内容と代金を次の予定に繰り越します（次の予定がなければ「振替待ち」）。','Private lessons are kept as “rescheduled”; the plan and payment carry over to the next lesson (or wait as a pending make-up).')}</p></div>`:''}
+      <p class="hint" style="margin:8px 0 0">${L('プライベートレッスンは「予定変更」として残します（繰り越さない。前払い分だけ振替待ちに残します）。','Private lessons are kept as “rescheduled”; nothing carries over except prepaid ones (kept as pending make-ups).')}</p></div>`:''}
     <p class="hint">${L('繰り返しの予定（↻）は、この日の分だけ消えます。ほかの日はそのままです。','For repeating items (↻), only this day is removed.')}</p>
     <div class="foot"><button class="btn block danger" data-act="skipSave" id="sk-btn" style="background:var(--due);color:var(--card)">${L(`${F.skip.sel.size}件を消す`,`Clear ${F.skip.sel.size}`)}</button></div>`);
 }
@@ -1536,7 +1536,7 @@ function skipSave(){
   const reason=F.skip.reason, conflict=reason==='こちらの都合'?confOf(F.cxl.conf):null;
   ls.forEach(c=>{
     c.status='cancelled';c.cancel={reason,by:reason==='こちらの都合'?'coach':'student',conflict,on:today(),carry:'none'};
-    const t=nextPlanned(c,ids);if(t){moveTo(c,t);carried++}else{c.cancel.carry='pending';kept++}
+    if(c.pay.mode==='per'&&c.pay.paid){c.cancel.carry='pending';kept++}else c.pay={mode:'none'};   // 11/8：繰り越さない（前払い分だけ振替待ちに残す）
   });
   S.lessons.forEach(l=>{if(l.cancel?.to&&remove.includes(l.cancel.to)){l.cancel.carry='pending';delete l.cancel.to}});
   S.lessons=S.lessons.filter(l=>!remove.includes(l.id));
@@ -1571,15 +1571,15 @@ function cancelForm(id,coach){
     <div class="fld"><span class="lb">${L('理由','Reason')}</span><div class="chips">${REASONS.map(r=>`<button class="chip" data-act="cxReason" data-v="${r}" aria-pressed="${r===F.cxl.reason}">${tReason(r)}</button>`).join('')}</div>
       <div id="cx-conf" style="margin-top:8px" ${F.cxl.reason==='こちらの都合'?'':'hidden'}>${conflictChips(l.date,F.cxl.conf)}</div></div>
     <div class="fld"><span class="lb">${L('繰り越し','Carry over')}</span><div class="radio">
-      ${nxt?`<label><input type="radio" name="carry" value="next" checked> ${L(`次の予定（${dl(nxt.date)}）に繰り越す`,`Carry over to the next lesson (${dl(nxt.date)})`)}<small>${L('やる予定だった内容と、前払い分を次の予定に引き継ぎます','Moves the plan and any prepayment to the next lesson')}</small></label>`:''}
-      <label><input type="radio" name="carry" value="new" ${nxt?'':'checked'}> ${L('振替の日にちを決める','Pick a make-up date')}<small>${L('新しく予定を入れて、内容と支払いを引き継ぎます','Schedules a new lesson with the plan and payment carried over')}</small></label>
-      <div class="two" id="cx-newbox" ${nxt?'hidden':''}><div class="fld" style="margin:0"><label for="cx-date">${L('振替の日付','Make-up date')}</label><input type="date" id="cx-date" value="${addDays(l.date,7)}"></div><div class="fld" style="margin:0"><span class="lb">${L('時間','Time')}</span>${timeSel('cx-t',l.time)}</div></div>
+      ${nxt?`<label><input type="radio" name="carry" value="next"> ${L(`次の予定（${dl(nxt.date)}）に繰り越す`,`Carry over to the next lesson (${dl(nxt.date)})`)}<small>${L('やる予定だった内容と、前払い分を次の予定に引き継ぎます','Moves the plan and any prepayment to the next lesson')}</small></label>`:''}
+      <label><input type="radio" name="carry" value="new"> ${L('振替の日にちを決める','Pick a make-up date')}<small>${L('新しく予定を入れて、内容と支払いを引き継ぎます','Schedules a new lesson with the plan and payment carried over')}</small></label>
+      <div class="two" id="cx-newbox" hidden><div class="fld" style="margin:0"><label for="cx-date">${L('振替の日付','Make-up date')}</label><input type="date" id="cx-date" value="${addDays(l.date,7)}"></div><div class="fld" style="margin:0"><span class="lb">${L('時間','Time')}</span>${timeSel('cx-t',l.time)}</div></div>
       <label><input type="radio" name="carry" value="later"> ${L('振替の日にちはあとで決める','Decide the make-up later')}<small>${L('ホームに「振替待ち」として残り、次に予定を入れると自動で振替になります','Stays on Home as a pending make-up; the next lesson you add becomes the make-up')}</small></label>
-      <label><input type="radio" name="carry" value="none"> ${L('繰り越さない','Don’t carry over')}</label>
-      <div id="cx-feebox" hidden class="paybox"><label class="check"><input type="checkbox" id="cx-fee"> ${L('キャンセル料をいただく','Charge a cancellation fee')}</label><div class="two"><div class="fld" style="margin:0"><label for="cx-amt">${L('金額（$）','Amount ($)')}</label><input type="number" id="cx-amt" inputmode="decimal" value="${l.pay.mode==='per'?l.pay.amount:priceFor(l.sid,l.dur,grp.length)}"></div></div></div>
+      <label><input type="radio" name="carry" value="none" checked> ${L('繰り越さない（ふつうはこれ）','Don’t carry over (default)')}</label>
+      <div id="cx-feebox" class="paybox"><label class="check"><input type="checkbox" id="cx-fee"> ${L('キャンセル料をいただく','Charge a cancellation fee')}</label><div class="two"><div class="fld" style="margin:0"><label for="cx-amt">${L('金額（$）','Amount ($)')}</label><input type="number" id="cx-amt" inputmode="decimal" value="${l.pay.mode==='per'?l.pay.amount:priceFor(l.sid,l.dur,grp.length)}"></div></div></div>
     </div></div>
     <p class="hint">${L('回数券はキャンセルでは減りません。','Cancelling never uses a lesson from the pack.')}</p>
-    <button class="btn block danger" data-act="cancelSave" style="background:var(--due);color:var(--card)">${coach?L('予定を消して繰り越す','Remove and carry over'):L('キャンセルにする','Cancel lesson')}</button>`);
+    <button class="btn block danger" data-act="cancelSave" style="background:var(--due);color:var(--card)">${coach?L('予定変更にする','Mark as rescheduled'):L('キャンセルにする','Cancel lesson')}</button>`);
 }
 function nextPlanned(l,ex=[]){return sortL(S.lessons.filter(x=>x.sid===l.sid&&x.status==='planned'&&x.id!==l.id&&!ex.includes(x.id)&&(x.date+x.time)>(l.date+l.time)))[0]}
 function moveTo(c,t){
