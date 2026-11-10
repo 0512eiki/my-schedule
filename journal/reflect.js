@@ -255,11 +255,24 @@ async function open(id) {
 }
 
 // 画面に戻った時：本部の秘書のまとめが届いていれば読みこみ直す（打っている途中・保存待ちの時は読みこまない）
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible' || !Day.date || saveT || adding || box.contains(document.activeElement)) return;
-  if (tidy && (tidy.busy || tidy.points)) return;   // 整えた文の案を見せている間は読みこみ直さない（案が消えるため）
-  if (window.JournalVoice && window.JournalVoice.state().mode !== 'idle') return;   // 11/9：声の途中（一時停止中も）は読みこみ直さない（続きの声が消えた欄に行っていた）
-  loading = load(Day.date);
-});
+const canReload = () => document.visibilityState === 'visible' && Day.date && !saveT && !adding && !box.contains(document.activeElement)
+  && !(tidy && (tidy.busy || tidy.points))   // 整えた文の案を見せている間は読みこみ直さない（案が消えるため）
+  && !(window.JournalVoice && window.JournalVoice.state().mode !== 'idle')   // 11/9：声の途中（一時停止中も）は読みこみ直さない（続きの声が消えた欄に行っていた）
+  && !Outbox.pending('reflections', R?.id);
+document.addEventListener('visibilitychange', () => { if (canReload()) loading = load(Day.date); });
+// 11/9 本人「A：15秒ごとに読み直して合わせる」：ほかの端末で直した振り返りも出す。中身が変わった時だけ描き直す（打っている途中・保存待ちの時は読まない）
+const reflKey = (rows) => JSON.stringify(rows.map((r) => [r.id, r.about, r.said, r.points, r.status]).sort());
+setInterval(async () => {
+  if (!canReload()) return;
+  const d = Day.date;
+  let rows;
+  try { const r = await JR.fetch('api/reflections?date=' + d); if (!r.ok) return; rows = await r.json(); } catch { return; }
+  if (d !== Day.date || !canReload() || reflKey(rows) === reflKey(list)) return;
+  const keepId = R?.id;
+  list = rows.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  const again = keepId && list.find((r) => r.id === keepId);
+  if (again && again.about === about) R = again; else pick();
+  if (Day.view === 'refl') render();
+}, 15000);
 if (Day.date) loading = load(Day.date);
 window.JournalReflect = { open, current: () => R, toPoints, ready: () => loading };

@@ -17,7 +17,7 @@
      予定から入って、まだ選んでいないメニューは、時間が近いクラスに「予定に近い」の印だけ（勝手には決めない）。2つ目のメニューは残りのクラスを先に選ぶ
    使っている部品（index.html 側）：$, state, openDate, today, parseD, WD, hhmm, escapeHtml, toast, closeSide, renderList, layout, Outbox, pageRead
    ========================================================= */
-import { menuFromLines, isCalId, arcParts, arcPhotos, arcPlain, classFor, classesOn, minutesBetween, pickClass, monthOf } from './rules.mjs';
+import { mergeMenu, menuKey, menuFromLines, isCalId, arcParts, arcPhotos, arcPlain, classFor, classesOn, minutesBetween, pickClass, monthOf } from './rules.mjs';
 const CLOUD = !!(window.JR && window.JR.cloud);
 const esc = (s) => escapeHtml(String(s ?? ''));
 const isoNow = () => new Date().toISOString();
@@ -61,6 +61,7 @@ async function loadDay(d) {
   if (my !== seq) return;
   menus.sort((a, b) => (a.start_time || '99').localeCompare(b.start_time || '99') || String(a.created_at).localeCompare(String(b.created_at)));
   Day.menus = menus; carry = co || { from_date: null, items: [] };
+  menuBase.clear(); for (const m of menus) menuBase.set(m.id, clone(m));
   renderMenus(); notify('date');
 }
 async function loadTemplates() {
@@ -77,11 +78,79 @@ function saveLater(kind, row, ms = 500) {
   row.updated_at = isoNow();
   const k = kind + '/' + row.id;
   clearTimeout(timers.get(k)?.[0]);
-  const go = () => { timers.delete(k); Outbox.put(kind, clone(row)).then(() => afterSave(kind, row.id)); };
+  // メニューは送る前に、ほかの端末の直しが入っていないか見て合わせる（11/9。画面を離れる時などは待たずにすぐ送る）
+  const go = async (fast) => {
+    timers.delete(k);
+    if (kind === 'menus' && !fast) await mergeBeforeSave(row);
+    Outbox.put(kind, clone(row)).then(() => afterSave(kind, row.id));
+  };
   timers.set(k, [setTimeout(go, ms), go]);
   setSt(kind, row.id, '保存待ち…', '');
 }
-function flushAll() { for (const [, [t, go]] of [...timers]) { clearTimeout(t); go(); } }
+function flushAll() { for (const [, [t, go]] of [...timers]) { clearTimeout(t); go(true); } }
+
+/* ---------- 2台で直した時に合わせる（11/9 本人「A：15秒ごとに読み直して合わせる」） ----------
+   前は、メニューはほかの端末の直しを読み直さず、保存は1件まるごとの上書きだった（端末2で直した項目名が、端末1で題を直すと消えた）
+   ・15秒ごと・画面に戻った時：サーバーの形が前に読んだ形から変わっていたら、合わせて画面を直す（打っている途中・メモを開いている間は待つ）
+   ・送る前にも、もう一度サーバーを見て合わせる
+   ・合わせ方は rules.mjs の mergeMenu（自分が変えていない所は相手の直し・変えた所は自分の直し） */
+const menuBase = new Map();        // id → 前に読んだ（送った）サーバーの形
+async function serverMenus(d) {
+  try {
+    const r = await Promise.race([JR.fetch('api/menus?date=' + d), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 2500))]);
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+async function mergeBeforeSave(row) {
+  if (!menuBase.has(row.id) || Outbox.isOffline()) return;   // この端末で作ったばかり（まだサーバーにない）・電波がない時は、待たずに送る
+  const rows = await serverMenus(row.date); if (!rows) return;
+  const s = rows.find((x) => x.id === row.id); if (!s) return;
+  const b = menuBase.get(row.id);
+  if (b && menuKey(s) === menuKey(b)) return;               // ほかの端末は直していない
+  const before = menuKey(row);
+  Object.assign(row, mergeMenu(b, row, s)); menuBase.set(row.id, clone(s));
+  if (menuKey(row) !== before && row.date === Day.date) menuDirtyView = true;
+}
+Outbox.on((it) => { if (it.kind === 'menus' && it.op === 'put') menuBase.set(it.id, clone(it.body)); });
+let menuDirtyView = false, syncing = false;
+const editingMenus = () => !nov.hidden || (document.activeElement && vMenu.contains(document.activeElement));
+async function syncMenus() {
+  const d = Day.date;
+  if (!d || syncing || document.visibilityState !== 'visible') return;
+  syncing = true;
+  try {
+    const rows = await serverMenus(d);
+    if (!rows || d !== Day.date) return;
+    for (const s of rows) {
+      if (s.date !== d) continue;
+      const l = Day.menus.find((m) => m.id === s.id), b = menuBase.get(s.id);
+      if (!l) {                                               // ほかの端末で作ったメニュー（自分が消した途中のものは足さない）
+        if (Outbox.pending('menus', s.id)) continue;
+        Day.menus.push(clone(s)); menuBase.set(s.id, clone(s)); menuDirtyView = true; continue;
+      }
+      if (b && menuKey(s) === menuKey(b)) continue;          // サーバーは変わっていない
+      const mine = timers.has('menus/' + s.id) || Outbox.pending('menus', s.id);
+      const before = menuKey(l);
+      Object.assign(l, mergeMenu(b, l, s)); menuBase.set(s.id, clone(s));
+      if (menuKey(l) !== before) { menuDirtyView = true; if (mine && !timers.has('menus/' + s.id)) saveLater('menus', l, 0); }
+    }
+    // ほかの端末で消したメニュー（この端末で直していないものだけ）
+    const ids = new Set(rows.map((r) => r.id));
+    const gone = Day.menus.filter((m) => !ids.has(m.id) && menuBase.has(m.id) && !timers.has('menus/' + m.id) && !Outbox.pending('menus', m.id));
+    if (gone.length) { Day.menus = Day.menus.filter((m) => !gone.includes(m)); gone.forEach((m) => menuBase.delete(m.id)); menuDirtyView = true; }
+    if (menuDirtyView) Day.menus.sort((a, b) => (a.start_time || '99').localeCompare(b.start_time || '99') || String(a.created_at).localeCompare(String(b.created_at)));
+  } finally { syncing = false; }
+  showSynced();
+}
+function showSynced() {
+  if (!menuDirtyView || editingMenus()) return;              // 打っている途中は描き直さない（次の読み直しで出す）
+  menuDirtyView = false;
+  if (Day.view === 'menu') renderMenus();
+  renderList();
+}
+setInterval(syncMenus, 15000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncMenus(); });
+document.addEventListener('focusout', () => setTimeout(showSynced, 50));
 addEventListener('pagehide', flushAll);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushAll(); });
 function afterSave(kind, id) {

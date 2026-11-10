@@ -112,8 +112,13 @@ function close() { flushSave(); ov.hidden = true; ov.innerHTML = ''; R = null; p
 function status(msg, kind = '') { const el = ov.querySelector('.rv-save'); if (el) { el.textContent = msg; el.className = 'rv-save ' + kind; } }
 function scheduleSave() { clearTimeout(saveT); status('保存待ち…'); saveT = setTimeout(doSave, 600); }
 // 保存は、まず端末に入れてから送る（outbox.js）。つながらない時は、つながったら自動で送る
+// 11/10 本人「何か書いた時だけ残す」：開いてすぐ閉じた空の反省は保存しない（前は空の「書きかけ」が一覧・カレンダーに残った）
+const hasContent = (r) => !!(r.event.trim() || r.match.trim() || r.fixes.some((f) => f.trim())
+  || Object.values(r.answers).some((a) => a.text.trim() || a.ink.length));
+const isNew = new Set();   // まだ一度も保存していない反省の id
 function doSave() {
   clearTimeout(saveT); if (!R) return saving;
+  if (isNew.has(R.id)) { if (!hasContent(R)) { status('何か書くと保存します'); return saving; } isNew.delete(R.id); }
   const body = JSON.parse(JSON.stringify(R));
   saving = saving.then(() => Outbox.put('reviews', body)).then(() => saved(body.id)).catch(() => { status('保存できません（あとでもう一度）', 'err'); });
   return saving;
@@ -158,7 +163,7 @@ function render() {
     body = summaryHTML(R, true);
   }
   ov.innerHTML = `<div class="rv glass">
-    <div class="rv-head"><b>🏆 試合の反省</b><span class="rv-step">${step < STEPS ? `${step + 1} / ${STEPS}` : 'まとめ'}</span><span class="rv-save"></span><button class="ib" data-act="close" title="閉じる">✕</button></div>
+    <div class="rv-head"><b>🏆 試合の反省</b><span class="rv-step">${step < STEPS ? `${step + 1} / ${STEPS}` : 'まとめ'}</span><span class="rv-save"></span>${isNew.has(R.id) ? '' : '<button class="lnk del" data-act="del-review">この反省を消す</button>'}<button class="ib" data-act="close" title="閉じる">✕</button></div>
     <div class="rv-dots">${dots}</div>
     <div class="rv-body">${body}<div class="rv-warn">${nameWarn()}</div></div>
     <div class="rv-foot">
@@ -244,6 +249,14 @@ ov.addEventListener('click', (e) => {
   }
   const act = b.dataset.act;
   if (act === 'close') close();
+  // 11/10 本人「消すボタンをつける」：2回押しで消す（1回目で「本当に消す」に変わる・3秒で戻る）
+  if (act === 'del-review') {
+    if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = '本当に消す'; setTimeout(() => { if (b.isConnected) { b.textContent = 'この反省を消す'; delete b.dataset.sure; } }, 3000); return; }
+    const id = R.id; clearTimeout(saveT); saveT = 0;
+    ov.hidden = true; ov.innerHTML = ''; R = null; pad = null; document.body.classList.remove('rv-open');
+    saving.then(() => Outbox.del('reviews', id)).then(() => { renderReviewList(); window.JournalRecords?.refresh?.(); });
+    toast('試合の反省を消しました');
+  }
   if (act === 'prev') go(R.step - 1);
   if (act === 'next') go(R.step + 1);
   if (act === 'done') { R.done = true; doSave().then(close); }
@@ -275,7 +288,7 @@ async function openReview(id, opts = {}) {
 }
 function newReview() {
   const d = (typeof state !== 'undefined' && state.date) || today();
-  R = { ...emptyReview(d), id: newId(d), source: 'app' };
+  R = { ...emptyReview(d), id: newId(d), source: 'app' }; isNew.add(R.id);
   ov.hidden = false; document.body.classList.add('rv-open'); render(); scheduleSave();
 }
 

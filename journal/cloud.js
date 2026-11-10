@@ -311,6 +311,11 @@ body.jr-locked{overflow:hidden}
         idb.set('review:' + id, { ...c, updatedAt: ms(r.updated_at) }); changed();
         return [200, { ok: true, updatedAt: ms(r.updated_at) }];
       }
+      if (method === 'DELETE') {   // 11/10：試合の反省を消す（本人「消すボタンをつける」）
+        await q(sb.from('jr_reviews').delete().eq('owner', uid).eq('id', id));
+        idb.set('review:' + id, 'none'); changed();
+        return [200, { ok: true }];
+      }
     }
 
     // ---- 練習メニュー・型・振り返り（GET = 一覧、PUT = id で上書き、DELETE = 消す） ----

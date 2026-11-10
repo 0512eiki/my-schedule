@@ -275,3 +275,31 @@ export function daySummary({ pages = [], menus = [], reflections = [], reviews =
   for (const v of reviews) if (inR(v.date)) day(v.date).reviews.push({ id: v.id, event: clip(v.event, 60) });
   return [...out.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
+
+/* ---------- 2台で同じメニューを直した時に合わせる（11/9 本人「A：15秒ごとに読み直して合わせる」） ----------
+   base = 前に読んだサーバーの形、mine = この端末の今の形、theirs = いまサーバーにある形（ほかの端末の直しが入っている）
+   ・自分が変えていない所は、相手の直しを取る。相手が変えていない所は、自分の直しを残す
+   ・項目：数が同じなら1つずつ（名前・メモごと）に同じ決まり。数がちがって両方とも直していたら、自分の項目を残す（相手の直しは次の読み直しで上書きしない）
+   ・サーバーは保存のたびに自分で時刻をつけるので、時刻ではなく中身で比べる */
+export const MENU_SYNC = ['title', 'start_time', 'end_time', 'items', 'class_id', 'from_kind', 'from_id'];
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+export const menuKey = (m) => JSON.stringify(MENU_SYNC.map((f) => (m ? m[f] ?? null : null)));
+export function mergeMenu(base, mine, theirs) {
+  const out = { ...mine };
+  if (!base) base = theirs;
+  for (const f of MENU_SYNC) {
+    if (f === 'items') continue;
+    if (same(mine[f], base[f])) out[f] = theirs[f];
+  }
+  const bi = base.items || [], mi = mine.items || [], ti = theirs.items || [];
+  if (same(mi, bi)) out.items = JSON.parse(JSON.stringify(ti));
+  else if (same(ti, bi)) out.items = mi;
+  else if (mi.length === bi.length && ti.length === bi.length) {
+    out.items = mi.map((it, i) => {
+      const o = { ...it };
+      for (const k of new Set([...Object.keys(it), ...Object.keys(ti[i] || {})])) if (same(it[k], bi[i]?.[k])) o[k] = ti[i]?.[k];
+      return o;
+    });
+  } else out.items = mi;
+  return out;
+}
