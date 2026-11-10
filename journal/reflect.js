@@ -90,9 +90,11 @@ function names() {
   return findNameLike([R?.said || '', addText, ...(R?.points || []).map((p) => p.text)].join('\n'));
 }
 // まとめを直しても「話した言葉（もとの文）」に名前が残っている時は、伏せるボタンを出す（〇〇 にする）
-function warnText() {
+// 11/9：整えた文の案（tidyPts）では名前がもう〇〇になっている時も、「もとの文の名前も伏せる」を出す（前は注意だけ出て、伏せるボタンがなかった）
+function warnText(tidyPts) {
   const n = names(); if (!n.length) return '';
-  const inSaidOnly = R && !adding && R.points.length > 0 && ['heard', 'summarized', 'ok'].includes(R.status) && !findNameLike(R.points.map((p) => p.text).join('\n')).length;
+  const pts = tidyPts || R?.points || [];
+  const inSaidOnly = R && !adding && pts.length > 0 && (tidyPts || ['heard', 'summarized', 'ok'].includes(R.status)) && !findNameLike(pts.map((p) => p.text).join('\n')).length;
   return `⚠️ 名前はイニシャルに（例：K.T.）：${n.map(esc).join('、')}`
     + (inSaidOnly ? `<br><small>まとめは直っています。話した言葉（もとの文）に残っています</small> <button class="lnk" data-act="mask">もとの文の名前も伏せる</button>` : '');
 }
@@ -107,13 +109,17 @@ async function startTidy(text, base) {
   tidy = my; render();
   const menu = [...new Set(Day.menus.flatMap((m) => m.items.map((it) => it.name.trim())).filter(Boolean))];
   try {
-    const r = await JR.fetch('api/tidy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ said: text, about: row.about, date: row.date, menu, before: base }) });
+    // 11/9：つながりが悪いと「整えています…」のまま止まっていた → 40秒で止める（下の「やめる」でも止められる）
+    const r = await Promise.race([
+      JR.fetch('api/tidy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ said: text, about: row.about, date: row.date, menu, before: base }) }),
+      new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 40000)),
+    ]);
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !Array.isArray(j.points) || !j.points.length) throw new Error(j.error || r.status);
     const got = j.points.map((p) => ({ text: String(p.text || '').trim(), next: !!p.next })).filter((p) => p.text);
     my.points = j.merged ? got : [...base, ...got];   // merged = AI が今のまとめと合わせて全部を返した（試作の簡単な整えは足すだけ）
   } catch (e) {
-    my.err = /fetch|network|offline/i.test(String(e.message)) ? 'つながらないので整えられませんでした' : '整えられませんでした';
+    my.err = /fetch|network|offline/i.test(String(e.message)) ? 'つながらないので整えられませんでした' : e.message === 'timeout' ? '時間がかかりすぎたので整えるのをやめました' : '整えられませんでした';
   }
   my.busy = false;
   if (tidy === my && R === row && Day.view === 'refl') render();
@@ -121,11 +127,12 @@ async function startTidy(text, base) {
 function tidyCard() {
   const t = tidy;
   if (t.busy) return `<section class="card glass rf rf-tidy"><h3>✨ 文章を整えています… <span class="rf-st"></span></h3>
-    <p class="rf-note">くり返し・「えっと」・聞き間違いを直して、日記のように整えます（話していないことは足しません）。話した言葉はもう保存してあります</p></section>`;
+    <p class="rf-note">くり返し・「えっと」・聞き間違いを直して、日記のように整えます（話していないことは足しません）。話した言葉はもう保存してあります</p>
+    <div class="row"><button class="btn sub" data-act="tidy-stop">やめる（文で区切ったまま）</button></div></section>`;
   return `<section class="card glass rf rf-tidy">
     <h3>✨ 整えた文 <span class="rf-st"></span></h3>
     <div class="tidy-pts">${t.points.map((p) => `<p>${esc(p.text)}${p.next ? ' <span class="chip w">次へ</span>' : ''}</p>`).join('')}</div>
-    <div class="warnname">${warnText()}</div>
+    <div class="warnname">${warnText(t.points)}</div>
     <div class="row"><button class="btn" data-act="tidy-ok">OK（これで保存）</button><button class="btn sub" data-act="tidy-fix">✏️ 直す</button></div>
     <details class="rf-said-view" open><summary>話した言葉（もとの文・そのまま残します）</summary><p>${esc(R.said)}</p></details>
   </section>`;
@@ -218,6 +225,7 @@ box.addEventListener('click', (e) => {
   if (!R) return;
   if (act === 'add') { adding = true; addText = ''; render(); box.querySelector('.rf-said')?.focus({ preventScroll: true }); return; }
   if (act === 'mask') { for (const n of names()) R.said = R.said.split(n).join('〇〇' + n.match(/(さん|くん|君|ちゃん|選手)$/)[0]); save(); render(); return; }
+  if (act === 'tidy-stop') { if (tidy && tidy.busy) { tidy = { id: tidy.id, busy: false, points: null, err: '整えるのをやめました' }; render(); } return; }
   if (act === 'tidy-ok' || act === 'tidy-fix') {
     if (!tidy || tidy.id !== R.id || !tidy.points) return;
     R.points = tidy.points; tidy = null;
@@ -234,7 +242,7 @@ box.addEventListener('click', (e) => {
 box.addEventListener('pointerdown', (e) => {
   const b = e.target.closest('[data-act=mic]'); if (!b) return;
   e.preventDefault();
-  window.JournalVoice?.open(box.querySelector('.rf-said'), { label: '振り返り', done: '振り返りの欄に入れました。続けて話すか「話し終わった」へ。' });
+  window.JournalVoice?.open(box.querySelector('.rf-said'), { find: () => box.querySelector('.rf-said'), label: '振り返り', done: '振り返りの欄に入れました。続けて話すか「話し終わった」へ。' });
 });
 
 /* ---------- ほかから開く（さがす） ---------- */
@@ -250,6 +258,7 @@ async function open(id) {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !Day.date || saveT || adding || box.contains(document.activeElement)) return;
   if (tidy && (tidy.busy || tidy.points)) return;   // 整えた文の案を見せている間は読みこみ直さない（案が消えるため）
+  if (window.JournalVoice && window.JournalVoice.state().mode !== 'idle') return;   // 11/9：声の途中（一時停止中も）は読みこみ直さない（続きの声が消えた欄に行っていた）
   loading = load(Day.date);
 });
 if (Day.date) loading = load(Day.date);

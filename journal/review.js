@@ -190,6 +190,8 @@ function isAnswered(i) {
 }
 function markDots() { ov.querySelectorAll('.rv-dot[data-go]').forEach((d) => { const i = +d.dataset.go; if (i < STEPS) d.classList.toggle('done', isAnswered(i)); }); const w = ov.querySelector('.rv-warn'); if (w) w.innerHTML = nameWarn(); }
 function go(step) {
+  // 11/9：声で聞いている途中に「次へ」→ 前は描き直した後の続きの声が見えない欄に入っていた → 最後の文字まで今の答えに入れてから進む
+  if (window.JournalVoice && window.JournalVoice.state().mode !== 'idle') { window.JournalVoice.finishNow().then(() => go(step)); return; }
   // 読み取り待ちの手書きがあれば、次へ進む前にすぐ読む（まとめに文字が出るように）
   if (readBox && readBox.t && readBox.stale()) readBox.run(false);
   flushSave(); R.step = Math.max(0, Math.min(STEPS, step)); scheduleSave(); render(); ov.querySelector('.rv-body')?.scrollTo(0, 0); }
@@ -226,7 +228,7 @@ function summaryHTML(r, editable) {
 ov.addEventListener('input', (e) => {
   if (!R) return;
   const t = e.target;
-  if (t.dataset.f) R[t.dataset.f] = t.value;
+  if (t.dataset.f) { if (t.dataset.f === 'date' && !t.value) return; R[t.dataset.f] = t.value; }   // 11/9：日付を空にすると、まとめに「NaN/NaN」と出ていた → 空の時は前の日付のまま
   else if (t.dataset.fix !== undefined) R.fixes[+t.dataset.fix] = t.value;
   else if (t.dataset.a) R.answers[t.dataset.a].text = t.value;
   scheduleSave(); markDots();

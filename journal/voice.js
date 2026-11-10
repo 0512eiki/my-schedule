@@ -78,16 +78,30 @@
     if (txt === V.shown) return;
     V.shown = txt;
     if (txt) try { localStorage.setItem('jr:voice-last', JSON.stringify({ at: Date.now(), where: where(), text: txt })); } catch {}
-    const ta = (V.target && document.contains(V.target)) ? V.target : el('addText');
+    const ta = tgt();
+    if (!ta) { lost(txt); return; }
     const sep = ta.tagName === 'INPUT' ? ' ' : '\n';
     ta.value = V.base && txt ? V.base + sep + txt : (V.base || txt);
     ta.dispatchEvent(new Event('input', { bubbles: true }));
   }
   // 本人が欄を打って直した時：その文字を新しい土台にして、声の分はその後ろに足す
   function rebase() {
-    const ta = (V.target && document.contains(V.target)) ? V.target : el('addText');
     commitSession(); live();
+    const ta = tgt(); if (!ta) return;
     V.base = ta.value.trim(); V.committed = ''; V.shown = '';
+  }
+  // 入れる先の欄。11/9：画面が描き直されて欄が消えた時、前は黙って「書き足す」欄（文字のメモ）に入れていた（振り返り・試合の反省の声が見えない所へ行く）
+  //   → 開いた所が教えてくれた「さがし方」（opts.find）で新しい欄をさがす。見つからなければ止めて、話した文をパネルに出す
+  function tgt() {
+    if (V.target && document.contains(V.target)) return V.target;
+    const n = V.find && V.find();
+    if (n && document.contains(n)) { V.target = n; return n; }
+    return null;
+  }
+  function lost(txt) {
+    if (V.lost) return;
+    V.lost = true;
+    setTimeout(() => giveUp('⚠️ 入れる欄が閉じたので止めました。話した文はここに残しています：\n' + (txt || '').slice(-400), true), 0);
   }
   function joinText(a, b) { a = a.trim(); b = b.trim(); if (!a) return b; if (!b) return a; return /[。、．，!?！？\s]$/.test(a) ? a + b : a + '。' + b; }
 
@@ -223,16 +237,16 @@
 
   /* ---------- ボタン ---------- */
   function open(target, opts = {}) {
-    V.target = target || el('addText');
+    if (V.mode !== 'idle' && SR) return;                     // 11/9：使っている途中に別の 🎙 を押しても、入れる先を変えない（前は先を変えてから止めていたので、別の欄を上書きした）
+    V.target = target || el('addText'); V.find = opts.find || null; V.lost = false;
     msgEl.dataset.label = opts.label || '';
     msgEl.dataset.done = opts.done || '';                     // 文字にした後の一言（振り返りなど、欄ごとに変える）
     if (!SR) {
       setUI('idle', 'この端末のブラウザは声入力に対応していません。キーボードの🎤を使ってください。');
       el('addText').focus(); return;
     }
-    if (V.mode !== 'idle') return;
     V.committed = ''; V.session = ''; V.interim = ''; V.elapsed = 0; V.fails = 0;
-    V.base = (V.target && document.contains(V.target) ? V.target : el('addText')).value.trim(); V.shown = '';
+    V.base = (tgt() || V.target).value.trim(); V.shown = '';
     V.anyText = false; V.audioOk = false; V.listenAt = 0; V.warned = false;
     clearInterval(V.timer); V.timer = setInterval(tick, 500); tick();
     keepAwake(true);
@@ -265,7 +279,7 @@
     const txt = V.committed.trim();
     const secs = Math.round(V.elapsed / 1000);
     V.committed = ''; V.shown = '';
-    if (txt) { const ta = (V.target && document.contains(V.target)) ? V.target : el('addText'); ta.focus({ preventScroll: true }); }
+    if (txt) { const ta = tgt(); if (ta) ta.focus({ preventScroll: true }); }
     if (!txt) report(`empty secs=${secs} audio=${V.audioOk} ${where()}`);
     setUI('idle', txt ? msgEl.dataset.done || (V.target && V.target.id !== 'addText' ? '答えの欄に入れました。直してから「次へ」へ。' : '書き足す欄に入れました。直してから「追加」を押してください。')
       : `❌ 入っていません。声が文字になりませんでした${secs >= 3 ? `（${secs}秒 聞いていました）` : ''}。${V.audioOk ? 'マイクに音が来ていないかも（車の Bluetooth・イヤホンを外す）。' : 'マイクがつながりませんでした。'}もう一度 🎙 か、キーボードの🎤で。`);

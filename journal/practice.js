@@ -42,6 +42,8 @@ function show(view) {
   document.body.dataset.view = view;
   document.querySelectorAll('#daySeg [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
   if (view === 'ink') layout();             // 隠れていた間は手書きの大きさが分からないので、測り直す
+  if (view === 'menu' && document.body.dataset.shown !== 'menu') renderMenus();   // 11/9：隠れていた間に届いたクラスなどを出す（iPad・Mac で「どのクラス？」が出なかった）
+  document.body.dataset.shown = view;
   notify('view');
 }
 $('daySeg').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) show(b.dataset.view); });
@@ -133,8 +135,12 @@ let composing = false;   // 日本語の変換の途中（この間は保存し�
 // 11/3 本人「メモを押すと画面が真っ白になってフリーズする」：前は見えている所が動くたび（scroll）に入力画面も動かしていた
 //   → 入力画面が動く → Safari が文字の場所を見せようとまた動かす → … の追いかけっこで固まることがある
 //   → 入力画面は画面の上にくっつけたまま動かさず、高さだけを、キーボードが出た・引っこんだ時（resize）に合わせる（1コマに1回・変わった時だけ）
+// 11/9 本人「メモを開くと、打っている文字が画面に出ない」：11/3 の直しで入力画面を上にくっつけたままにしたので、
+//   キーボードが出て Safari が見えている所を下へずらすと（vv.offsetTop > 0）、入力画面の上の方（題・打っている行）が画面の上に隠れていた
+//   → ずれた分だけ入力画面も下げる（translateY）。ただし追いかけっこにならないよう、ずれが落ち着いてから（0.15秒動きがない時）1回だけ・
+//     変わった時だけ・1回開くごとに続けて直すのは6回まで（キーボードが出る・引っこむでリセット）
 const vv = window.visualViewport;
-let fitRaf = 0, fitH = -1;
+let fitRaf = 0, fitH = -1, fitY = 0, fitT = 0, fitN = 0;
 function fitNote() {
   if (nov.hidden || fitRaf) return;
   fitRaf = requestAnimationFrame(() => {
@@ -142,21 +148,42 @@ function fitNote() {
     if (nov.hidden) return;
     const h = Math.round(vv ? vv.height : innerHeight);
     if (Math.abs(h - fitH) < 2) return;
-    fitH = h; nov.style.height = h + 'px';
+    fitH = h; fitN = 0; nov.style.height = h + 'px';
+    placeNote();
   });
 }
-if (vv) vv.addEventListener('resize', fitNote);
+function placeNote() {
+  if (nov.hidden || !vv) return;
+  clearTimeout(fitT);
+  fitT = setTimeout(() => {
+    if (nov.hidden) return;
+    const y = Math.max(0, Math.round(vv.offsetTop));
+    if (Math.abs(y - fitY) < 2 || fitN >= 6) return;
+    fitN++; fitY = y; nov.style.transform = y ? `translateY(${y}px)` : '';
+  }, 150);
+}
+if (vv) { vv.addEventListener('resize', fitNote); vv.addEventListener('scroll', placeNote); }
+// 開いている間に一覧が描き直されても（クラス・型の読みこみなど）、打った文字が消えた欄に入らないように、毎回いまの欄をさがす
+let noteMenu = null, noteI = -1;
+function liveNoteIn() {
+  if (noteIn && noteIn.isConnected) return noteIn;
+  const box = noteMenu ? vMenu.querySelector(`[data-menu="${noteMenu}"]`) : tov;
+  noteIn = box ? box.querySelector(`.mi[data-i="${noteI}"] input.note`) : null;
+  return noteIn;
+}
 function pushNote() {
-  if (!noteIn || noteIn.value === ntx.value) return;
-  noteIn.value = ntx.value; noteIn.dispatchEvent(new Event('input', { bubbles: true }));
+  const inp = liveNoteIn();
+  if (!inp || inp.value === ntx.value) return;
+  inp.value = ntx.value; inp.dispatchEvent(new Event('input', { bubbles: true }));
 }
 function openNote(b) {
   const row = b.closest('.mi'); noteIn = row.querySelector('input.note');
+  noteMenu = row.closest('[data-menu]')?.dataset.menu || null; noteI = +row.dataset.i;
   nov.querySelector('.note-ttl').textContent = (row.querySelector('.nm').value || '').trim() || 'メモ';
-  ntx.value = noteIn.value; nov.hidden = false; fitH = -1; fitNote();
+  ntx.value = noteIn.value; nov.hidden = false; fitH = -1; fitY = 0; fitN = 0; nov.style.transform = ''; fitNote();
   ntx.focus({ preventScroll: true }); ntx.setSelectionRange(ntx.value.length, ntx.value.length);
 }
-function closeNote() { composing = false; pushNote(); nov.hidden = true; noteIn = null; ntx.blur(); }
+function closeNote() { composing = false; pushNote(); nov.hidden = true; noteIn = null; noteMenu = null; clearTimeout(fitT); nov.style.transform = ''; fitY = 0; ntx.blur(); }
 // 打つたびに項目へ（いつもの保存の流れにのせる）。変換の途中は待って、決まってから
 ntx.addEventListener('compositionstart', () => { composing = true; });
 ntx.addEventListener('compositionend', () => { composing = false; pushNote(); });
@@ -573,6 +600,7 @@ $('tabbar').addEventListener('click', async (e) => {
   const t = b.dataset.tab;
   if (t === 'today') { closeSide(); if (state.date !== today()) await openDate(today()); show('menu'); return; }
   side.classList.toggle('only-search', t === 'search');
+  if (t === 'rec' && $('q').value) { $('q').value = ''; $('searchRes').hidden = true; $('searchRes').innerHTML = ''; $('sideNormal').hidden = false; }   // 11/9：さがした後に「記録」を押すと空っぽだった
   side.classList.add('open'); $('scrim').classList.add('show');
   if (t === 'search') setTimeout(() => $('q').focus(), 60);
   if (t === 'rec') { renderArcList(); window.JournalRecords?.refresh(); }   // 昔の記録・カレンダーは開くたびに読み直す（アプリを開いたあとで入った分も出す）

@@ -21,6 +21,12 @@
     return document.scrollingElement || document.documentElement;
   }
 
+  // 11/9：指でスクロールし始めたら押さえるのをやめる、の聞き耳は全部の紙で1つだけ（前は紙を作るたびに足して外さなかった。試合の反省の質問を進めるたびに増えた）
+  const guards = new Set();   // { el, stop }
+  const eachGuard = (fn) => { for (const g of guards) { if (g.el.isConnected) { g.seen = true; fn(g); } else if (g.seen) { g.stop(); guards.delete(g); } } };   // 画面から消えた紙は外す
+  window.addEventListener('wheel', () => eachGuard((g) => g.stop()), { passive: true });
+  document.addEventListener('touchstart', (e) => { if ([...e.touches].some((t) => t.touchType === 'stylus')) return; eachGuard((g) => { if (!g.el.contains(e.target)) g.stop(); }); }, { passive: true, capture: true });
+
   window.inkGuard = function (el, busy) {
     el.style.touchAction = 'none';
     el.style.overscrollBehavior = 'none';
@@ -49,9 +55,7 @@
       hold.raf = requestAnimationFrame(holdTick);
     }
     // 指でスクロールし始めたら押さえるのをやめる（紙の外・帯・一覧などで動かした時も）
-    const userScroll = () => holdStop();
-    window.addEventListener('wheel', userScroll, { passive: true });
-    document.addEventListener('touchstart', (e) => { if (![...e.touches].some((t) => t.touchType === 'stylus') && !el.contains(e.target)) holdStop(); }, { passive: true, capture: true });
+    guards.add({ el, stop: holdStop });
     window.JR_inkHold = { stop: holdStop, active: () => !!hold };
 
     el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'pen') { lastPen = performance.now(); stopCoast(); pan = null; holdStart(); } }, true);

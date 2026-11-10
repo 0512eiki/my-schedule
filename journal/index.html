@@ -168,6 +168,7 @@ body.voice-open .main{padding-bottom:calc(var(--voice-h,140px) + 40px)}   /* 声
 .rv-ov{position:fixed;inset:0;z-index:40;background:rgba(15,18,35,.28);display:grid;place-items:center;padding:calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom))}
 .rv-ov[hidden]{display:none}
 .rv-ov{grid-template-columns:minmax(0,1fr)}   /* 長いクラスの名前などで、窓が画面より広がらないように（10/28） */
+.rv-ov{grid-template-rows:minmax(0,1fr)}   /* 11/9：長い窓（試合の反省・型）の下の「次へ／閉じる」が画面の外に出て押せなかった → 窓を画面の高さに収めて中をスクロール */
 .rv-ov>.rv{min-width:0;justify-self:center}
 .rv{width:min(820px,100%);max-height:100%;display:flex;flex-direction:column;background:rgba(255,255,255,.80)}
 .rv-head{display:flex;align-items:center;gap:10px;padding:12px 14px 6px}
@@ -636,7 +637,12 @@ function stashPending(){
   try{ localStorage.setItem(pendKey(state.date), JSON.stringify({at:Date.now(), patch:p})); }catch{}
 }
 
+const addDrafts = {};   // 「追加」を押す前の書き足し欄の文字（日ごと。ほかの日へ持ちこさない）
 async function openDate(d){
+  // 11/9：「全文を直す」の途中で日を変えると、前の日の文が次の日に保存されていた → 直している分は前の日に保存してから移る
+  if(state.date && $('editBtn').dataset.mode==='edit') $('editBtn').onclick();
+  if(state.date) addDrafts[state.date] = $('addText').value;
+  $('addText').value = addDrafts[d] || '';
   await flush();                     // 前のページの保存を先に済ませる
   state.date = d; state.undo = []; state.redo = []; state.dirty.clear();
   location.hash = d;
@@ -693,7 +699,12 @@ async function save(){
     if(state.dirty.size && !state.failed) scheduleSave(300);
   }
 }
-async function flush(){ clearTimeout(scheduleSave._t); if(state.dirty.size) await save(); }
+async function flush(){
+  clearTimeout(scheduleSave._t);
+  // 11/9：保存の途中なら終わるのを待つ（待たずに日を変えると、その間に書いた線が消えることがあった）
+  for(let i=0; state.saving && i<200; i++) await new Promise(r=>setTimeout(r,50));
+  if(state.dirty.size) await save();
+}
 addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden'){ stashPending(); flush(); } else refreshFromServer(); });
 addEventListener('pagehide', ()=>{ stashPending(); flush(); });
 
@@ -703,7 +714,7 @@ async function refreshFromServer(){
   try{
     const pg = await Store.get(state.date);
     if(pg && pg.updatedAt > (state.page.updatedAt||0) && !state.dirty.size && !drawing){
-      const keepUndo = pg.ink === state.page.ink;
+      const keepUndo = JSON.stringify(pg.ink||[]) === JSON.stringify(state.page.ink||[]);   // 11/9：見出しだけ変わった時は戻す・やり直すを消さない（前はいつも別物と見ていた）
       state.page = pg; pg.text = withAppends(pg.date, pg.text);
       if(!keepUndo){ state.undo=[]; state.redo=[]; updateUndoBtns(); }
       if(document.activeElement !== $('title')) $('title').value = pg.title || '';
